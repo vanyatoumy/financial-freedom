@@ -1,0 +1,266 @@
+// Money rules: every transaction moves money in wallets (where it is) and jars (what it is for).
+// Balances are never stored; they are recomputed from the transaction list.
+import { state } from './store.js';
+
+// ---------- money & dates ----------
+export function parseMoney(str) {
+  if (typeof str === 'number') return Math.round(str * 100);
+  const s = String(str ?? '').replace(/[\s  ]/g, '').replace(',', '.');
+  if (!s || !/^-?\d*\.?\d*$/.test(s)) return NaN;
+  return Math.round(parseFloat(s) * 100);
+}
+
+const nf0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
+const nf2 = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export function fmt(c, { sign = false } = {}) {
+  c = Math.round(c || 0);
+  const v = c / 100;
+  const s = (c % 100 ? nf2 : nf0).format(Math.abs(v)) + ' F';
+  if (v < 0) return '−' + s;
+  return sign && v > 0 ? '+' + s : s;
+}
+export const toInput = c => (c ? String(c / 100).replace('.', ',') : '');
+
+const pad = n => String(n).padStart(2, '0');
+export const dateStr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+export const today = () => dateStr(new Date());
+export const nowLocal = () => { const d = new Date(); return `${dateStr(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+export function addDays(ds, n) { const d = new Date(ds.slice(0, 10) + 'T12:00'); d.setDate(d.getDate() + n); return dateStr(d); }
+export function addMonths(ds, n) {
+  const d = new Date(ds.slice(0, 10) + 'T12:00'); const day = d.getDate();
+  d.setDate(1); d.setMonth(d.getMonth() + n);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  return dateStr(d);
+}
+export const daysBetween = (a, b) => Math.round((new Date(b.slice(0, 10) + 'T12:00') - new Date(a.slice(0, 10) + 'T12:00')) / 864e5);
+export function fmtDate(ds, withTime = false) {
+  if (!ds) return '';
+  const d = new Date(ds.length <= 10 ? ds + 'T12:00' : ds);
+  const o = { day: '2-digit', month: 'short', year: 'numeric' };
+  if (withTime && ds.length > 10) Object.assign(o, { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString('fr-FR', o);
+}
+
+// ---------- lookups ----------
+export const jar = id => state.jars.find(j => j.id === id);
+export const wallet = id => state.wallets.find(w => w.id === id);
+export const cat = id => state.categories.find(c => c.id === id);
+export const loan = id => state.loans.find(l => l.id === id);
+export const investment = id => state.investments.find(i => i.id === id);
+
+// ---------- split ----------
+// Each jar gets its % rounded down to the whole franc; the leftover goes to the remainder jar.
+export function split(amount) {
+  const rem = state.settings.remainderJar || 'nec';
+  const parts = state.jars.filter(j => j.pct > 0).map(j => ({ jar: j.id, amount: Math.floor(amount * j.pct / 100 / 100) * 100 }));
+  const left = amount - parts.reduce((s, p) => s + p.amount, 0);
+  const r = parts.find(p => p.jar === rem) || parts[0];
+  if (r) r.amount += left;
+  return parts;
+}
+
+// ---------- effects of one transaction ----------
+export function effects(tx) {
+  const w = {}, j = {};
+  const add = (m, k, v) => { if (k && v) m[k] = (m[k] || 0) + v; };
+  const a = tx.amount || 0;
+  if (tx.history) return { w, j }; // past event recorded for stats only, already in the opening balances
+  switch (tx.type) {
+    case 'income':
+      add(w, tx.wallet, a);
+      (tx.alloc || []).forEach(p => add(j, p.jar, p.amount));
+      break;
+    case 'expense': case 'loan_out': case 'debt_pay': case 'invest':
+      add(w, tx.wallet, -a); add(j, tx.jar, -a); break;
+    case 'loan_in': case 'debt_in':
+      add(w, tx.wallet, a); add(j, tx.jar, a); break;
+    case 'transfer':
+      add(w, tx.wallet, -(a + (tx.fee || 0))); add(w, tx.to, a);
+      add(j, tx.feeJar, -(tx.fee || 0)); break;
+    case 'jar_move': case 'forgive':
+      // forgive: Dons (jar) pays for the gift, the jar the loan came from (toJar) is refunded
+      add(j, tx.jar, -a); add(j, tx.toJar, a); break;
+    case 'adjust':
+      add(w, tx.wallet, a); add(j, tx.jar, a); break;
+    case 'opening':
+      Object.entries(tx.wl || {}).forEach(([k, v]) => add(w, k, v));
+      Object.entries(tx.jl || {}).forEach(([k, v]) => add(j, k, v));
+      break;
+  }
+  return { w, j };
+}
+export function balances(txs = state.tx) {
+  const w = Object.fromEntries(state.wallets.map(x => [x.id, 0]));
+  const j = Object.fromEntries(state.jars.map(x => [x.id, 0]));
+  for (const t of txs) {
+    const e = effects(t);
+    for (const k in e.w) w[k] = (w[k] || 0) + e.w[k];
+    for (const k in e.j) j[k] = (j[k] || 0) + e.j[k];
+  }
+  return { w, j };
+}
+
+// ---------- loans & debts ----------
+export function loanInfo(l) {
+  const txs = state.tx.filter(t => t.loan === l.id);
+  let paid = 0, interest = 0, forgiven = 0;
+  for (const t of txs) {
+    if (t.type === 'loan_in') paid += t.amount;
+    if (t.type === 'debt_pay') { paid += t.amount - (t.interestPart || 0); interest += t.interestPart || 0; }
+    if (t.type === 'forgive') forgiven += t.amount;
+  }
+  const remaining = Math.max(0, l.amount - paid - forgiven);
+  const t = today();
+  let status = 'active';
+  if (forgiven > 0 && remaining === 0) status = 'forgiven';
+  else if (remaining === 0) status = 'done';
+  else if (l.due && l.due < t) status = 'late';
+  else if (paid > 0) status = 'partial';
+  return { paid, interest, forgiven, remaining, status, txs };
+}
+export const STATUS_LABEL = {
+  active: ['En cours', ''], partial: ['Partiellement remboursé', 'warn'], late: ['En retard', 'danger'],
+  done: ['Remboursé', 'ok'], forgiven: ['Pardonné (don)', 'ok'],
+};
+
+// ---------- investments ----------
+export function investInfo(inv) {
+  const added = state.tx.filter(t => t.type === 'invest' && t.investment === inv.id).reduce((s, t) => s + t.amount, 0);
+  const returns = state.tx.filter(t => t.type === 'income' && t.investment === inv.id).sort((a, b) => a.date.localeCompare(b.date));
+  const invested = (inv.initial || 0) + added;
+  const received = returns.reduce((s, t) => s + t.amount, 0);
+  const value = inv.value ?? invested;
+  let yearly = null;
+  if (invested > 0 && inv.start) {
+    const days = Math.max(30, daysBetween(inv.start, today()));
+    yearly = received / invested * 365 / days * 100;
+  }
+  return { invested, received, value, returns, yearly, roi: invested ? received / invested * 100 : 0 };
+}
+
+// ---------- summaries ----------
+export function summary() {
+  const b = balances();
+  const spendJars = state.jars.filter(j => j.rule === 'normal' || j.rule === 'must_spend');
+  const available = spendJars.reduce((s, j) => s + (b.j[j.id] || 0), 0);
+  const protectedAmt = state.jars.filter(j => j.rule === 'no_spend' || j.rule === 'goal').reduce((s, j) => s + (b.j[j.id] || 0), 0);
+  const pending = state.jars.filter(j => j.home && wallet(j.home)).map(j => ({
+    jar: j, wallet: wallet(j.home), amount: (b.j[j.id] || 0) - (b.w[j.home] || 0),
+  })).filter(p => p.amount > 0);
+  let lent = 0, owed = 0;
+  for (const l of state.loans) {
+    const r = loanInfo(l).remaining;
+    if (l.dir === 'lent') lent += r; else owed += r;
+  }
+  const invValue = state.investments.reduce((s, i) => s + investInfo(i).value, 0);
+  const cash = Object.values(b.w).reduce((s, v) => s + v, 0);
+  return { b, available, protectedAmt, pending, lent, owed, invValue, cash, netWorth: cash + lent + invValue - owed };
+}
+
+// Passive income vs living costs over the last 90 days.
+export function freedom() {
+  const from = addDays(today(), -90);
+  const recent = state.tx.filter(t => t.date.slice(0, 10) >= from);
+  const passive = recent.filter(t => t.type === 'income' && t.passive).reduce((s, t) => s + t.amount, 0);
+  const needs = recent.filter(t => (t.type === 'expense' || t.type === 'debt_pay') && t.jar === 'nec').reduce((s, t) => s + t.amount, 0);
+  const months = 3;
+  return { passive: passive / months, needs: needs / months, pct: needs ? passive / needs * 100 : null };
+}
+
+export function monthStats(ym) {
+  const txs = state.tx.filter(t => t.date.startsWith(ym));
+  const income = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const spent = txs.filter(t => t.type === 'expense' || t.type === 'debt_pay').reduce((s, t) => s + t.amount, 0);
+  const fees = txs.filter(t => t.type === 'transfer').reduce((s, t) => s + (t.fee || 0), 0);
+  const byJar = {};
+  txs.filter(t => t.type === 'expense').forEach(t => { byJar[t.jar] = (byJar[t.jar] || 0) + t.amount; });
+  return { income, spent: spent + fees, fees, byJar, txs };
+}
+
+export function countStreak() {
+  const days = new Set(state.counts.map(c => c.date));
+  let d = today(), n = 0;
+  if (!days.has(d)) d = addDays(d, -1);
+  while (days.has(d)) { n++; d = addDays(d, -1); }
+  return n;
+}
+
+// Most recent interest date (MM-DD list) on or before today.
+export function lastInterestDate(w) {
+  const t = today(); const y = +t.slice(0, 4);
+  const cands = [y - 1, y].flatMap(yy => (w.interestDates || []).map(md => `${yy}-${md}`)).filter(d => d <= t).sort();
+  return cands.pop() || null;
+}
+
+export function reminders() {
+  const out = [];
+  const s = summary();
+  const t = today();
+  for (const p of s.pending) {
+    out.push({ level: 'warn', icon: p.jar.icon, text: `${fmt(p.amount)} de ${p.jar.name} n'est pas encore dans ${p.wallet.name}.`,
+      action: `#/add?type=transfer&to=${p.wallet.id}&amount=${p.amount}`, label: 'Ranger' });
+  }
+  if (!state.counts.some(c => c.date === t)) out.push({ level: 'info', icon: 'sun', text: 'Comptage du matin pas encore fait.', action: '#/count', label: 'Compter' });
+  for (const l of state.loans) {
+    const i = loanInfo(l);
+    if (!i.remaining || !l.due) continue;
+    const d = daysBetween(t, l.due);
+    const who = l.dir === 'lent' ? `${l.person} doit te rendre` : `Tu dois rendre à ${l.person}`;
+    if (d < 0) out.push({ level: 'danger', icon: 'clock', text: `${who} ${fmt(i.remaining)} (en retard de ${-d} j).`, action: `#/loan/${l.id}`, label: 'Voir' });
+    else if (d <= 3) out.push({ level: 'warn', icon: 'clock', text: `${who} ${fmt(i.remaining)} ${d === 0 ? "aujourd'hui" : `dans ${d} j`}.`, action: `#/loan/${l.id}`, label: 'Voir' });
+  }
+  const pay = wallet('paysika');
+  const activeSubs = state.subs.filter(x => x.keep);
+  for (const sub of state.subs) {
+    const d = daysBetween(t, sub.next);
+    if (d <= 2) out.push({ level: sub.keep ? 'warn' : 'info', icon: 'repeat',
+      text: `${sub.name} (${fmt(sub.amount)}) se renouvelle ${d < 0 ? 'depuis ' + -d + ' j' : d === 0 ? "aujourd'hui" : `dans ${d} j`}. ${sub.keep ? 'Recharge PAYSIKA ?' : 'Laisser expirer.'}`,
+      action: '#/subs', label: 'Gérer' });
+  }
+  if (pay && s.b.w.paysika > 0 && state.subs.length) out.push({ level: 'warn', icon: 'card', text: `PAYSIKA n'est pas vide (${fmt(s.b.w.paysika)}) : un abonnement pourrait se renouveler.`, action: '#/subs', label: 'Voir' });
+  for (const inv of state.investments) {
+    if (inv.next && daysBetween(t, inv.next) <= 3) out.push({ level: 'info', icon: 'coins', text: `${inv.name} : paiement attendu ${fmtDate(inv.next)}. A-t-il payé ?`, action: `#/invest/${inv.id}`, label: 'Noter' });
+  }
+  for (const w of state.wallets.filter(x => x.interestPct)) {
+    const ld = lastInterestDate(w);
+    const since = state.settings.setupAt || t;
+    if (!ld || ld < since || (s.b.w[w.id] || 0) <= 0) continue;
+    const got = state.tx.some(x => x.type === 'income' && x.wallet === w.id && x.cat === 'interest' && x.date.slice(0, 10) >= addDays(ld, -7));
+    if (!got) out.push({ level: 'info', icon: 'percent', text: `Intérêts ${w.name} du ${fmtDate(ld)} : environ ${fmt(Math.round(s.b.w[w.id] * w.interestPct / 100))} attendus.`,
+      action: `#/add?type=income&wallet=${w.id}&cat=interest&jar=${state.jars.find(j => j.home === w.id)?.id || ''}&amount=${Math.round(s.b.w[w.id] * w.interestPct / 100)}`, label: 'Noter' });
+  }
+  const dim = new Date(+t.slice(0, 4), +t.slice(5, 7), 0).getDate();
+  const fun = state.jars.find(j => j.rule === 'must_spend');
+  if (fun && dim - +t.slice(8, 10) < 5 && s.b.j[fun.id] > 0) out.push({ level: 'info', icon: fun.icon, text: `Il te reste ${fmt(s.b.j[fun.id])} en ${fun.name} ce mois-ci : fais-toi plaisir !`, action: `#/jar/${fun.id}`, label: 'Voir' });
+  return out;
+}
+
+// ---------- labels ----------
+export const TYPE_LABEL = {
+  income: 'Revenu', expense: 'Dépense', transfer: 'Transfert', jar_move: 'Entre comptes', loan_out: 'Prêt accordé',
+  loan_in: 'Remboursement reçu', debt_in: 'Emprunt', debt_pay: 'Remboursement de dette', forgive: 'Prêt pardonné',
+  invest: 'Investissement', adjust: 'Écart de comptage', opening: 'Solde de départ',
+};
+
+const TYPE_ICON = { transfer: 'transfer', jar_move: 'shuffle', loan_out: 'arrow-up-right', loan_in: 'arrow-down-left', debt_in: 'arrow-down-left',
+  debt_pay: 'arrow-up-right', forgive: 'heart', invest: 'trending-up', adjust: 'scale', opening: 'flag' };
+export const txIcon = t => cat(t.cat)?.icon || TYPE_ICON[t.type] || 'tag';
+
+export function txTitle(t) {
+  const c = cat(t.cat);
+  switch (t.type) {
+    case 'income': case 'expense': return t.note || c?.name || TYPE_LABEL[t.type];
+    case 'transfer': return `${wallet(t.wallet)?.name} → ${wallet(t.to)?.name}`;
+    case 'jar_move': return `${jar(t.jar)?.name} → ${jar(t.toJar)?.name}`;
+    case 'invest': return investment(t.investment)?.name || 'Investissement';
+    case 'loan_out': case 'loan_in': case 'debt_in': case 'debt_pay': case 'forgive':
+      return `${TYPE_LABEL[t.type]} · ${loan(t.loan)?.person || ''}`;
+    default: return TYPE_LABEL[t.type] || t.type;
+  }
+}
+
+// Signed impact on the user's total money, for list display.
+export function txSign(t) {
+  const e = effects(t);
+  return Object.values(e.w).reduce((s, v) => s + v, 0);
+}
