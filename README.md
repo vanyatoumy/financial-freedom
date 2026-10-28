@@ -21,6 +21,8 @@ python -m http.server 8765
 Then open http://localhost:8765.
 
 ## Install it on your phone
+Live at **https://financial-freedom.vanyatoumy2.workers.dev** (Cloudflare, auto-deployed from GitHub on every push).
+
 Installing as an app needs an HTTPS address. Free options:
 1. **Netlify Drop**: go to https://app.netlify.com/drop and drag this folder onto the page. You get an `https://….netlify.app` link.
 2. **GitHub Pages**: push this folder to a GitHub repository and turn on Pages.
