@@ -72,8 +72,10 @@ export function effects(tx) {
       break;
     case 'expense': case 'loan_out': case 'debt_pay': case 'invest':
       add(w, tx.wallet, -a); add(j, tx.jar, -a); break;
-    case 'loan_in': case 'debt_in':
+    case 'loan_in': case 'debt_in': case 'div_collect':
       add(w, tx.wallet, a); add(j, tx.jar, a); break;
+    // div_accrue (dividend earned, held by the association) and div_convert (dividends → capital)
+    // don't touch wallets or jars: the money stays inside the investment.
     case 'transfer':
       add(w, tx.wallet, -(a + (tx.fee || 0))); add(w, tx.to, a);
       add(j, tx.feeJar, -(tx.fee || 0)); break;
@@ -124,18 +126,27 @@ export const STATUS_LABEL = {
 };
 
 // ---------- investments ----------
+// Dividends can be paid straight into a wallet ('income'), or held by the association first
+// ('div_accrue' → 'à percevoir'), then collected into a wallet ('div_collect') or turned into capital ('div_convert').
 export function investInfo(inv) {
-  const added = state.tx.filter(t => t.type === 'invest' && t.investment === inv.id).reduce((s, t) => s + t.amount, 0);
-  const returns = state.tx.filter(t => t.type === 'income' && t.investment === inv.id).sort((a, b) => a.date.localeCompare(b.date));
-  const invested = (inv.initial || 0) + added;
-  const received = returns.reduce((s, t) => s + t.amount, 0);
-  const value = inv.value ?? invested;
-  let yearly = null;
-  if (invested > 0 && inv.start) {
-    const days = Math.max(30, daysBetween(inv.start, today()));
-    yearly = received / invested * 365 / days * 100;
-  }
-  return { invested, received, value, returns, yearly, roi: invested ? received / invested * 100 : 0 };
+  const txs = state.tx.filter(t => t.investment === inv.id);
+  const sum = (type, f = () => true) => txs.filter(t => t.type === type && f(t)).reduce((s, t) => s + t.amount, 0);
+  const direct = sum('income');
+  const converted = sum('div_convert');
+  const collected = sum('div_collect');
+  const capital = (inv.initial || 0) + sum('invest') + converted;
+  const pending = Math.max(0, (inv.accrued || 0) + sum('div_accrue', t => !t.history) - collected - converted);
+  const dividends = txs.filter(t => t.type === 'div_accrue' || t.type === 'income').sort((a, b) => a.date.localeCompare(b.date));
+  const earned = dividends.reduce((s, t) => s + t.amount, 0);
+  const recent = dividends.slice(-6);
+  const avg = recent.length ? recent.reduce((s, t) => s + t.amount, 0) / recent.length : 0;
+  const yearly = capital > 0 && avg ? avg * (12 / (inv.freq || 1)) / capital * 100 : null;
+  const commitment = inv.commitment || 0;
+  return {
+    capital, invested: capital, pending, earned, received: collected + direct, dividends, returns: dividends, avg, yearly,
+    commitment, toPay: Math.max(0, commitment - capital), value: inv.value ?? capital + pending,
+    roi: capital ? earned / capital * 100 : 0,
+  };
 }
 
 // ---------- summaries ----------
@@ -161,7 +172,7 @@ export function summary() {
 export function freedom() {
   const from = addDays(today(), -90);
   const recent = state.tx.filter(t => t.date.slice(0, 10) >= from);
-  const passive = recent.filter(t => t.type === 'income' && t.passive).reduce((s, t) => s + t.amount, 0);
+  const passive = recent.filter(t => (t.type === 'income' && t.passive) || t.type === 'div_accrue').reduce((s, t) => s + t.amount, 0);
   const needs = recent.filter(t => (t.type === 'expense' || t.type === 'debt_pay') && t.jar === 'nec').reduce((s, t) => s + t.amount, 0);
   const months = 3;
   return { passive: passive / months, needs: needs / months, pct: needs ? passive / needs * 100 : null };
@@ -219,7 +230,7 @@ export function reminders() {
   }
   if (pay && s.b.w.paysika > 0 && state.subs.length) out.push({ level: 'warn', icon: 'card', text: `PAYSIKA n'est pas vide (${fmt(s.b.w.paysika)}) : un abonnement pourrait se renouveler.`, action: '#/subs', label: 'Voir' });
   for (const inv of state.investments) {
-    if (inv.next && daysBetween(t, inv.next) <= 3) out.push({ level: 'info', icon: 'coins', text: `${inv.name} : paiement attendu ${fmtDate(inv.next)}. A-t-il payé ?`, action: `#/invest/${inv.id}`, label: 'Noter' });
+    if (inv.next && daysBetween(t, inv.next) <= 3) out.push({ level: 'info', icon: 'coins', text: `Dividende ${inv.name} attendu le ${fmtDate(inv.next)} : combien ce mois-ci ?`, action: `#/invest/${inv.id}`, label: 'Noter' });
   }
   for (const w of state.wallets.filter(x => x.interestPct)) {
     const ld = lastInterestDate(w);
@@ -239,11 +250,13 @@ export function reminders() {
 export const TYPE_LABEL = {
   income: 'Revenu', expense: 'Dépense', transfer: 'Transfert', jar_move: 'Entre comptes', loan_out: 'Prêt accordé',
   loan_in: 'Remboursement reçu', debt_in: 'Emprunt', debt_pay: 'Remboursement de dette', forgive: 'Prêt pardonné',
-  invest: 'Investissement', adjust: 'Écart de comptage', opening: 'Solde de départ',
+  invest: 'Contribution', adjust: 'Écart de comptage', opening: 'Solde de départ',
+  div_accrue: 'Dividende à percevoir', div_collect: 'Dividendes encaissés', div_convert: 'Dividendes convertis en capital',
 };
 
 const TYPE_ICON = { transfer: 'transfer', jar_move: 'shuffle', loan_out: 'arrow-up-right', loan_in: 'arrow-down-left', debt_in: 'arrow-down-left',
-  debt_pay: 'arrow-up-right', forgive: 'heart', invest: 'trending-up', adjust: 'scale', opening: 'flag' };
+  debt_pay: 'arrow-up-right', forgive: 'heart', invest: 'trending-up', adjust: 'scale', opening: 'flag',
+  div_accrue: 'coins', div_collect: 'download', div_convert: 'repeat' };
 export const txIcon = t => cat(t.cat)?.icon || TYPE_ICON[t.type] || 'tag';
 
 export function txTitle(t) {
@@ -252,7 +265,8 @@ export function txTitle(t) {
     case 'income': case 'expense': return t.note || c?.name || TYPE_LABEL[t.type];
     case 'transfer': return `${wallet(t.wallet)?.name} → ${wallet(t.to)?.name}`;
     case 'jar_move': return `${jar(t.jar)?.name} → ${jar(t.toJar)?.name}`;
-    case 'invest': return investment(t.investment)?.name || 'Investissement';
+    case 'invest': case 'div_accrue': case 'div_collect': case 'div_convert':
+      return `${TYPE_LABEL[t.type]} · ${investment(t.investment)?.name || ''}`;
     case 'loan_out': case 'loan_in': case 'debt_in': case 'debt_pay': case 'forgive':
       return `${TYPE_LABEL[t.type]} · ${loan(t.loan)?.person || ''}`;
     default: return TYPE_LABEL[t.type] || t.type;

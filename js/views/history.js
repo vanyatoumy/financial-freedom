@@ -27,7 +27,7 @@ export function render() {
     lastDay = day;
     const e = effects(t);
     const sign = filter.jar ? e.j[filter.jar] || 0 : filter.wallet ? e.w[filter.wallet] || 0 : txSign(t);
-    const amount = t.type === 'opening' || t.type === 'jar_move' || t.type === 'forgive' || (t.type === 'transfer' && !filter.wallet) ? (sign || t.amount) : sign;
+    const amount = ['opening', 'jar_move', 'forgive', 'div_accrue'].includes(t.type) || (t.type === 'transfer' && !filter.wallet) ? (sign || t.amount) : sign;
     const sub = [
       t.date.length > 10 ? t.date.slice(11, 16) : '',
       t.type === 'expense' || t.type === 'income' ? esc(cat(t.cat)?.name || '') : TYPE_LABEL[t.type],
@@ -40,7 +40,10 @@ export function render() {
     const c = cat(t.cat);
     return `${sep}<div class="swipe"><button class="swipe-del" data-del="${t.id}">Supprimer</button>
       <div class="row">${tile(txIcon(t), c ? jar(t.jar)?.color || (t.type === 'income' ? 'var(--ok)' : '') : '')}<div class="l"><div class="t">${esc(txTitle(t))}</div><div class="s">${sub}</div></div>
-      <div class="r ${amount > 0 ? 'pos' : amount < 0 ? 'neg' : ''}">${fmt(amount, { sign: true })}</div></div></div>`;
+      ${t.type === 'div_convert'
+        // dividends → capital stays inside the investment: neutral amount, no sign
+        ? `<div class="r num">${fmt(t.amount)}</div>`
+        : `<div class="r ${amount > 0 ? 'pos' : amount < 0 ? 'neg' : ''}">${fmt(amount, { sign: true })}</div>`}</div></div>`;
   }).join('');
 
   const types = [['', 'Tout'], ['expense', 'Dépenses'], ['income', 'Revenus'], ['transfer', 'Transferts'], ['other', 'Autres']];

@@ -32,17 +32,20 @@ export function render({ q }) {
   const i = draft.inv || {};
   return `
     <h1>Ton investissement</h1>
-    <p class="muted">Étape 3/3 — Ton association (tu peux passer et l'ajouter plus tard).</p>
+    <p class="muted">Étape 3/3 — Ton association, avec les chiffres de ta dernière situation (tu peux passer et l'ajouter plus tard).</p>
     <form id="f" class="card mt">
       <div class="field"><label>Nom</label><input name="name" value="${esc(i.name || 'Association')}"></div>
-      <div class="field"><label>Montant investi</label><input name="initial" inputmode="decimal" value="${toInput(i.initial)}"></div>
-      <div class="field"><label>Date de l'investissement</label><input type="date" name="start" value="${i.start || ''}"></div>
+      <div class="grid2">
+        <div class="field"><label>Capital déjà versé</label><input name="initial" inputmode="decimal" placeholder="ex. 87 921" value="${toInput(i.initial)}"></div>
+        <div class="field"><label>Engagement total</label><input name="commitment" inputmode="decimal" placeholder="ex. 365 000" value="${toInput(i.commitment)}"></div>
+      </div>
+      <div class="field"><label>Dividendes à percevoir</label><input name="accrued" inputmode="decimal" placeholder="ex. 4 032" value="${toInput(i.accrued)}"></div>
       <div class="hr"></div>
-      <div class="field"><label>Paiement reçu fin août (montant)</label><input name="aug" inputmode="decimal" value="${toInput(i.aug)}"></div>
-      <div class="field"><label>Date de ce paiement</label><input type="date" name="augDate" value="${i.augDate || '2026-08-31'}"></div>
-      <div class="field"><label>Prochain paiement attendu</label><input type="date" name="next" value="${i.next || '2026-10-31'}"></div>
-      <div class="field"><label>Fréquence estimée (mois)</label><input name="freq" inputmode="numeric" value="${i.freq || 2}"></div>
-      <label class="check"><input type="checkbox" name="reinvest" checked> Réinvestir les gains (100% vers Investissement)</label>
+      <div class="grid2">
+        <div class="field"><label>Dernier dividende (montant)</label><input name="last" inputmode="decimal" placeholder="ex. 1 092" value="${toInput(i.last)}"></div>
+        <div class="field"><label>Daté du</label><input type="date" name="lastDate" value="${i.lastDate || '2026-09-01'}"></div>
+      </div>
+      <p class="small muted">Les dividendes arrivent chaque mois. Le prochain est attendu un mois après le dernier.</p>
       <div class="grid2 mt"><button class="btn" name="skip" value="1">Passer</button><button class="btn primary">Terminer</button></div>
     </form>`;
 }
@@ -99,12 +102,15 @@ export function mount(root, { q }) {
     state.tx = state.tx.filter(t => t.type !== 'opening');
     state.tx.push({ id: uid(), type: 'opening', date, wl: { ...draft.w }, jl: { ...draft.j }, created: Date.now() });
     if (!skip && d.name) {
-      const inv = { id: uid(), name: d.name, type: 'association', initial: parseMoney(d.initial || 0) || 0, start: d.start || '',
-        freq: +d.freq || 2, next: d.next || addMonths(today(), +d.freq || 2), reinvest: !!d.reinvest, missed: [] };
+      const lastDate = d.lastDate || today();
+      const inv = { id: uid(), name: d.name, type: 'association', initial: parseMoney(d.initial || 0) || 0,
+        commitment: parseMoney(d.commitment || 0) || 0, accrued: parseMoney(d.accrued || 0) || 0, start: today(),
+        freq: 1, next: addMonths(lastDate, 1), missed: [] };
       state.investments.push(inv);
-      const aug = parseMoney(d.aug || 0) || 0;
-      if (aug > 0) state.tx.push({ id: uid(), type: 'income', history: true, date: (d.augDate || today()) + 'T12:00', amount: aug,
-        wallet: 'om', cat: 'inv_return', passive: true, investment: inv.id, alloc: [{ jar: 'inv', amount: aug }], note: inv.name, created: Date.now() });
+      // the last dividend is kept for stats (average, freedom %) only: it is already inside "à percevoir"
+      const last = parseMoney(d.last || 0) || 0;
+      if (last > 0) state.tx.push({ id: uid(), type: 'div_accrue', history: true, date: lastDate + 'T12:00', amount: last,
+        investment: inv.id, note: inv.name, created: Date.now() });
     }
     state.settings.setupDone = true;
     state.settings.setupAt = today();
