@@ -1,5 +1,5 @@
 ﻿// Offline cache: try the network first (so updates show up), fall back to the cache when offline.
-const CACHE = 'financial-freedom-v8';
+const CACHE = 'financial-freedom-v9';
 const FILES = [
   './', './manifest.webmanifest', './css/styles.css',
   './js/app.js', './js/store.js', './js/logic.js', './js/ui.js', './js/defaults.js', './js/icons.js',

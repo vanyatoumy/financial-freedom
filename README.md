@@ -5,7 +5,7 @@ No dependencies and no build step. Data stays on the device (IndexedDB) and the 
 
 ## What it does (v1)
 - **6 jars** (Nécessité 50 %, Investissement, Économie, Instruction, Amusement, Dons 10 % each). Every income is split automatically.
-- **Wallets**: OM, MOMO, PAYSIKA, CASH, UBA (locked, holds Économie, +0.6 % every 6 months, only MOMO can send to it), Caisse (home box, holds Investissement).
+- **Wallets**: OM, MOMO, PAYSIKA, CASH, UBA (locked, holds Économie, ≈ +1.3 % every 6 months, only MOMO can send to it), Caisse (home box, holds Investissement).
 - **Quick add** at any time: expense, income, wallet transfer with fees, move between jars. Also favourites (one tap from the home screen).
 - **PAYSIKA one-step payment**: top-up + fee + expense in a single form. Subscription tracker with renewal alerts.
 - **Morning count**: type what each wallet holds, then explain each gap (forgotten expense, fees, interest) or record it as an unexplained gap. Shows a day streak.

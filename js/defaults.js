@@ -16,7 +16,7 @@ export const DEFAULT_WALLETS = [
   { id: 'paysika', name: 'PAYSIKA', icon: 'card', color: '#6366f1', role: 'online', decimals: true, daily: true },
   { id: 'cash', name: 'CASH', icon: 'banknote', color: '#16a34a', role: 'spending', decimals: false, daily: true },
   { id: 'uba', name: 'UBA', icon: 'lock', color: '#dc2626', role: 'vault', decimals: true, daily: false,
-    onlyFrom: ['momo'], interestPct: 0.6, interestDates: ['06-30', '12-31'] },
+    onlyFrom: ['momo'], interestPct: 1.3, interestDates: ['06-30', '12-31'] },
   { id: 'caisse', name: 'Caisse (boîte)', icon: 'box', color: '#a16207', role: 'vault', decimals: false, daily: false },
 ];
 
