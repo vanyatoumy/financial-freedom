@@ -1,7 +1,7 @@
 // Subscriptions paid with PAYSIKA: renewal dates, keep or let expire.
 import { state, save, uid } from '../store.js';
 import { parseMoney, fmt, today, fmtDate, daysBetween, balances } from '../logic.js';
-import { esc, jarOpts, formData, toast, ask, icon } from '../ui.js';
+import { esc, jarOpts, formData, toast, ask, icon, emptyState } from '../ui.js';
 
 export function render() {
   const b = balances();
@@ -21,7 +21,7 @@ export function render() {
           <button class="btn sm" data-toggle="${s.id}" aria-label="${s.keep ? 'Laisser expirer' : 'Garder'}">${icon(s.keep ? 'pause' : 'play')}</button>
           <button class="btn sm danger" data-del="${s.id}" aria-label="Supprimer">${icon('trash')}</button>
         </div></div>`;
-    }).join('') : '<div class="empty">Aucun abonnement.</div>'}</div>
+    }).join('') : emptyState('repeat', 'Aucun abonnement', 'Ajoute tes abonnements payés avec PAYSIKA : on te prévient 2 jours avant chaque renouvellement.')}</div>
     <form id="f" class="card">
       <h2>+ Ajouter un abonnement</h2>
       <div class="grid2">

@@ -27,9 +27,9 @@ export const jarTag = id => { const j = jar(id); return j ? `<span style="color:
 export const walletName = id => esc(wallet(id)?.name || '');
 
 let toastTimer;
-export function toast(msg, undo) {
+export function toast(msg, undo, { ok = false } = {}) {
   const el = document.getElementById('toast');
-  el.innerHTML = `<span>${esc(msg)}</span>${undo ? '<button type="button">Annuler</button>' : ''}`;
+  el.innerHTML = `<span class="msg">${ok ? `<span class="ok-dot">${icon('check')}</span>` : ''}<span>${esc(msg)}</span></span>${undo ? '<button type="button">Annuler</button>' : ''}`;
   el.hidden = false;
   clearTimeout(toastTimer);
   if (undo) el.querySelector('button').onclick = async () => { el.hidden = true; await undo(); };
@@ -72,7 +72,7 @@ export function enableSwipe(root) {
   });
 }
 
-export const haptic =() => { try { navigator.vibrate?.(12); } catch {} };
+export const haptic = () => { try { navigator.vibrate?.(12); } catch {} };
 
 // Bottom-sheet confirmation, replaces window.confirm / prompt. Resolves true/false (or the typed text with `input`).
 export function ask(message, { ok = 'Confirmer', cancel = 'Annuler', danger = false, input = null } = {}) {
@@ -93,15 +93,49 @@ export function ask(message, { ok = 'Confirmer', cancel = 'Annuler', danger = fa
   });
 }
 
-// Add one or more transactions at once, with a 5-second undo.
-export async function addTx(list, msg = 'Enregistré') {
+// Add one or more transactions at once. Shows a success snackbar with a 5-second undo,
+// unless `quiet` (the caller shows its own success screen and gets the undo function back).
+export async function addTx(list, msg = 'Enregistré', { quiet = false } = {}) {
   const items = (Array.isArray(list) ? list : [list]).map(t => ({ id: uid(), created: Date.now(), ...t }));
   state.tx.push(...items);
   await save();
   haptic();
   const ids = new Set(items.map(t => t.id));
-  toast(msg, async () => { state.tx = state.tx.filter(t => !ids.has(t.id)); await save(); toast('Annulé'); });
-  return items;
+  const undo = async () => { state.tx = state.tx.filter(t => !ids.has(t.id)); await save(); toast('Annulé'); };
+  if (!quiet) toast(msg, undo, { ok: true });
+  return Object.assign(items, { undo });
+}
+
+// Guided empty state: what this screen is for, and the one action to start.
+export function emptyState(ic, title, text, href, label) {
+  return `<div class="empty"><span class="empty-ico">${icon(ic)}</span><b>${esc(title)}</b><p>${esc(text)}</p>
+    ${href ? `<a class="btn primary" href="${href}">${esc(label)}</a>` : ''}</div>`;
+}
+
+// Full-screen success moment (peak-end): check badge with sparks, the key number, an optional breakdown.
+// actions: [{ label, value, primary }] -> resolves with the chosen value.
+export function celebrate({ title, amount, sub, rows = [], actions = [{ label: 'Terminé', value: 'done', primary: true }] }) {
+  return new Promise(resolve => {
+    const colors = ['#3fd0b8', '#fbbf24', '#f472b6', '#60a5fa', '#a78bfa', '#34d399'];
+    const sparks = Array.from({ length: 10 }, (_, i) => {
+      const a = i / 10 * Math.PI * 2, d = 70 + (i % 3) * 14;
+      return `<i class="spark" style="--c:${colors[i % colors.length]};--x:${Math.cos(a) * d}px;--y:${Math.sin(a) * d}px"></i>`;
+    }).join('');
+    const el = document.createElement('div');
+    el.className = 'win';
+    el.setAttribute('role', 'dialog');
+    el.innerHTML = `<div class="burst">${sparks}<span class="badge-ok">${icon('check')}</span></div>
+      <h1>${esc(title)}</h1>
+      ${amount ? `<div class="big">${esc(amount)}</div>` : ''}
+      ${sub ? `<p class="sub">${esc(sub)}</p>` : ''}
+      ${rows.length ? `<div class="card">${rows.map((r, i) => `<div class="split-row" style="animation-delay:${.25 + i * .07}s">
+        ${tile(r.icon, r.color, 'mini-ico')}<span class="l">${esc(r.name)}</span><b class="num">${esc(r.value)}</b></div>`).join('')}</div>` : ''}
+      ${actions.map(a => `<button class="btn ${a.primary ? 'primary' : a.value === 'undo' ? 'ghost' : ''}" data-v="${esc(a.value)}">${esc(a.label)}</button>`).join('')}`;
+    el.onclick = e => { const b = e.target.closest('[data-v]'); if (b) { el.remove(); resolve(b.dataset.v); } };
+    document.body.appendChild(el);
+    try { navigator.vibrate?.([12, 60, 24]); } catch {}
+    el.querySelector('.btn.primary')?.focus();
+  });
 }
 
 export function formData(form) {

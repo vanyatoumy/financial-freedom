@@ -1,7 +1,7 @@
 // Morning count: type what each wallet really holds, then explain or accept the gaps.
 import { state, save, uid } from '../store.js';
 import { parseMoney, fmt, toInput, balances, today, nowLocal, countStreak, fmtDate, wallet } from '../logic.js';
-import { esc, addTx, go, toast, jarOpts, ask, icon, tile } from '../ui.js';
+import { esc, addTx, go, toast, jarOpts, ask, icon, tile, celebrate } from '../ui.js';
 
 let typed = {}; // keeps what the user typed while they go add a forgotten expense
 
@@ -26,7 +26,7 @@ export function render() {
       <div class="mt">${vaults.map(row).join('')}</div>
     </details>
     <div id="gaps"></div>
-    <button class="btn primary block" id="validate">Valider le comptage</button>
+    <div class="cta-bar"><button class="btn primary block" id="validate">Valider le comptage</button></div>
     ${last.length ? `<h3 class="mt">Derniers comptages</h3><div class="card tight">${last.map(c => `<div class="row"><div class="l"><div class="t">${fmtDate(c.date)}</div></div><div class="r ${c.gap ? 'neg' : 'pos'}">${c.gap ? fmt(c.gap, { sign: true }) : icon('check')}</div></div>`).join('')}</div>` : ''}`;
 }
 
@@ -84,7 +84,15 @@ export function mount(root) {
     state.counts.push({ id: uid(), date: today(), gap: bad.reduce((s, x) => s + x.gap, 0),
       lines: g.map(x => ({ wallet: x.w.id, expected: b.w[x.w.id] || 0, actual: x.actual })) });
     typed = {};
-    if (adj.length) await addTx(adj, 'Comptage enregistré'); else { await save(); toast('Comptage parfait !'); }
+    if (adj.length) { await addTx(adj, 'Comptage enregistré'); return go('#/'); }
+    await save();
+    // peak moment: a perfect count is the daily win; streak milestones get a special line
+    const n = countStreak();
+    const total = g.reduce((s, x) => s + x.actual, 0);
+    const milestone = { 3: '3 jours de suite : la discipline commence.', 7: 'Une semaine complète ! Tu connais ton argent.', 30: '30 jours ! Ton argent n’a plus de secret pour toi.' }[n];
+    await celebrate({ title: 'Comptage parfait', amount: fmt(total),
+      sub: milestone || (n > 1 ? `${n} jours de suite. Chaque franc est à sa place.` : 'Chaque franc est à sa place.'),
+      actions: [{ label: 'Commencer la journée', value: 'done', primary: true }] });
     go('#/');
   };
 }

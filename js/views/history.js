@@ -1,7 +1,7 @@
 // All transactions, grouped by day, with filters.
 import { state, save } from '../store.js';
 import { fmt, fmtDate, today, effects, txTitle, txIcon, txSign, TYPE_LABEL, wallet, jar, cat } from '../logic.js';
-import { esc, opts, toast, ask, enableSwipe, tile } from '../ui.js';
+import { esc, opts, toast, ask, enableSwipe, tile, emptyState } from '../ui.js';
 
 let filter = { month: '', type: '', jar: '', wallet: '' };
 
@@ -51,7 +51,9 @@ export function render() {
       <div class="field"><select data-f="wallet">${opts(state.wallets, filter.wallet, { empty: 'Tous les portefeuilles' })}</select></div>
     </div>
     <div class="card grid2 center"><div><div class="small muted">Revenus</div><b class="pos">${fmt(inc)}</b></div><div><div class="small muted">Dépenses</div><b class="neg">${fmt(exp)}</b></div></div>
-    <div class="card tight">${rows || '<div class="empty">Aucun mouvement.</div>'}</div>`;
+    <div class="card tight">${rows || emptyState('list', filter.type || filter.jar || filter.wallet ? 'Rien avec ces filtres' : 'Aucun mouvement ce mois-ci',
+    filter.type || filter.jar || filter.wallet ? 'Essaie un autre filtre ou un autre mois.' : 'Chaque revenu, dépense et transfert apparaîtra ici, jour par jour.',
+    '#/add?type=expense', 'Ajouter une opération')}</div>`;
 }
 
 export function mount(root) {

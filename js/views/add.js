@@ -1,7 +1,7 @@
 // Quick add: expense, income, wallet transfer (with fee) and move between jars.
 import { state, uid } from '../store.js';
-import { parseMoney, fmt, toInput, nowLocal, addMonths, split, balances, cat, jar, wallet } from '../logic.js';
-import { esc, walletOpts, jarOpts, addTx, formData, go, toast, ask, haptic, icon } from '../ui.js';
+import { parseMoney, fmt, toInput, nowLocal, addMonths, split, balances, summary, cat, jar, wallet } from '../logic.js';
+import { esc, walletOpts, jarOpts, addTx, formData, go, toast, ask, haptic, icon, celebrate } from '../ui.js';
 
 const TYPES = [['expense', 'Dépense'], ['income', 'Revenu'], ['transfer', 'Transfert'], ['jar_move', 'Comptes']];
 
@@ -230,7 +230,21 @@ export function mount(root, { q }) {
     if (type === 'income') {
       const alloc = d.mode === 'one' ? [{ jar: d.jar, amount: a }] : split(a);
       state.settings.lastWallet = d.wallet;
-      await addTx({ type: 'income', date, amount: a, wallet: d.wallet, cat: d.cat, passive: !!d.passive, alloc, note }, `Revenu : ${fmt(a)}`);
+      const items = await addTx({ type: 'income', date, amount: a, wallet: d.wallet, cat: d.cat, passive: !!d.passive, alloc, note }, `Revenu : ${fmt(a)}`, { quiet: true });
+      // peak moment: show where every franc went, then the one follow-up action (put protected money in its home)
+      const pending = summary().pending[0];
+      const v = await celebrate({
+        title: 'Revenu enregistré', amount: fmt(a),
+        sub: alloc.length > 1 ? 'Chaque franc a maintenant un rôle.' : `Ajouté à ${jar(alloc[0].jar).name}.`,
+        rows: alloc.map(x => ({ icon: jar(x.jar).icon, color: jar(x.jar).color, name: jar(x.jar).name, value: fmt(x.amount) })),
+        actions: [
+          ...(pending ? [{ label: `Ranger ${fmt(pending.amount)} dans ${pending.wallet.name}`, value: 'move', primary: true }] : []),
+          { label: 'Terminé', value: 'done', primary: !pending },
+          { label: 'Annuler ce revenu', value: 'undo' },
+        ],
+      });
+      if (v === 'undo') await items.undo();
+      if (v === 'move') return go(`#/add?type=transfer&to=${pending.wallet.id}&amount=${pending.amount}`);
     }
 
     if (type === 'transfer') {

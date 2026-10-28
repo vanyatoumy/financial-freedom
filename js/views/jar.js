@@ -1,7 +1,7 @@
 // One jar: balance, this month, and every movement that touched it.
 import { state } from '../store.js';
 import { fmt, fmtDate, today, effects, txTitle, balances, jar, wallet } from '../logic.js';
-import { esc, icon, tile } from '../ui.js';
+import { esc, icon, tile, emptyState } from '../ui.js';
 
 const RULES = {
   normal: 'Compte de dépenses normales.',
@@ -12,7 +12,7 @@ const RULES = {
 
 export function render({ id }) {
   const j = jar(id);
-  if (!j) return '<div class="empty">Introuvable.</div>';
+  if (!j) return emptyState('alert', 'Introuvable', "Ce compte n'existe pas.", '#/', 'Accueil');
   const b = balances();
   const ym = today().slice(0, 7);
   const moves = state.tx.map(t => ({ t, v: effects(t).j[j.id] || 0 })).filter(x => x.v).sort((a, c) => c.t.date.localeCompare(a.t.date));
@@ -22,7 +22,7 @@ export function render({ id }) {
   const home = j.home && wallet(j.home);
   return `<div class="card jar" style="--c:${j.color}">
       ${tile(j.icon, j.color, 'jar-ico')}<div class="name"><span>${esc(j.name)}</span><span>${j.pct}% de chaque revenu</span></div>
-      <div class="amt" style="font-size:28px">${fmt(b.j[j.id])}</div>
+      <div class="amt num" style="font-size:var(--fs-4)">${fmt(b.j[j.id])}</div>
       <p class="small muted">${RULES[j.rule] || ''}</p>
       ${home ? `<p class="small">${icon('home')} Rangé dans <b>${esc(home.name)}</b> : ${fmt(b.w[home.id])}${b.j[j.id] - b.w[home.id] > 0 ? ` · <span class="neg">${fmt(b.j[j.id] - b.w[home.id])} pas encore rangé</span>` : ' ' + icon('check')}</p>` : ''}
     </div>
@@ -30,5 +30,5 @@ export function render({ id }) {
     ${j.rule === 'no_spend' ? `<a class="btn block" href="#/invest">${icon('trending-up')} Voir mes investissements</a>` : `<a class="btn block" href="#/add?type=expense&jar=${j.id}&back=%23%2Fjar%2F${j.id}">${icon('minus')} Dépenser depuis ce compte</a>`}
     <h3 class="mt">Mouvements</h3>
     <div class="card tight">${moves.slice(0, 200).map(({ t, v }) => `<div class="row"><div class="l"><div class="t">${esc(txTitle(t))}</div><div class="s">${fmtDate(t.date, true)}</div></div>
-      <div class="r ${v > 0 ? 'pos' : 'neg'}">${fmt(v, { sign: true })}</div></div>`).join('') || '<div class="empty">Aucun mouvement.</div>'}</div>`;
+      <div class="r ${v > 0 ? 'pos' : 'neg'}">${fmt(v, { sign: true })}</div></div>`).join('') || emptyState(j.icon, 'Aucun mouvement', `Chaque revenu met ${j.pct} % ici automatiquement.`, '#/add?type=income', 'Ajouter un revenu')}</div>`;
 }
