@@ -20,7 +20,7 @@ const navOf = { '': 'home', count: 'count', history: 'history' };
 // App bar title and back target for each screen. Top-level tabs have no back button.
 function meta({ name, id, q }) {
   switch (name) {
-    case '': return { title: 'Mes 6 Comptes' };
+    case '': return { title: 'Financial Freedom' };
     case 'add': return { title: 'Nouvelle opération', back: q.get('back') || '#/', close: true };
     case 'count': return { title: 'Comptage du matin' };
     case 'history': return { title: 'Historique' };
@@ -35,7 +35,7 @@ function meta({ name, id, q }) {
     case 'settings': return { title: 'Réglages', back: '#/more' };
     case 'jar': return { title: jar(id)?.name || 'Compte', back: '#/' };
     case 'setup': return { title: 'Bienvenue' };
-    default: return { title: 'Mes 6 Comptes' };
+    default: return { title: 'Financial Freedom' };
   }
 }
 

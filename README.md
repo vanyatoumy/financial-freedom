@@ -1,4 +1,4 @@
-# Mes 6 Comptes
+# Financial Freedom
 
 A phone web app (PWA) to track income and spending with the 6-jars method from *Les secrets d'un esprit millionnaire*.
 No dependencies and no build step. Data stays on the device (IndexedDB) and the app works offline.

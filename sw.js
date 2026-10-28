@@ -1,5 +1,5 @@
 // Offline cache: try the network first (so updates show up), fall back to the cache when offline.
-const CACHE = 'six-comptes-v4';
+const CACHE = 'financial-freedom-v5';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/styles.css',
   './js/app.js', './js/store.js', './js/logic.js', './js/ui.js', './js/defaults.js', './js/icons.js',

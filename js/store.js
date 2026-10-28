@@ -2,7 +2,7 @@
 import { defaultState, DEFAULT_JARS, DEFAULT_WALLETS, DEFAULT_CATEGORIES } from './defaults.js';
 import { ICON_NAMES } from './icons.js';
 
-const DB_NAME = 'six-comptes';
+const DB_NAME = 'six-comptes'; // internal storage name, kept so saved data is never lost
 const STORE = 'kv';
 const KEY = 'state';
 

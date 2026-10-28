@@ -116,8 +116,8 @@ export function mount(root) {
     state.favorites = state.favorites.filter(f => f.id !== b.dataset.fav); await save();
   });
 
-  root.querySelector('#csv').onclick = () => download(`6comptes-${today()}.csv`, csv(), 'text/csv;charset=utf-8');
-  root.querySelector('#backup').onclick = () => download(`6comptes-sauvegarde-${today()}.json`, JSON.stringify(state, null, 1), 'application/json');
+  root.querySelector('#csv').onclick = () => download(`financial-freedom-${today()}.csv`, csv(), 'text/csv;charset=utf-8');
+  root.querySelector('#backup').onclick = () => download(`financial-freedom-sauvegarde-${today()}.json`, JSON.stringify(state, null, 1), 'application/json');
   root.querySelector('#restore').onchange = async e => {
     const file = e.target.files[0]; if (!file) return;
     try {
