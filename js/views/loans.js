@@ -8,7 +8,7 @@ const badge = st => `<span class="badge ${STATUS_LABEL[st][1]}">${STATUS_LABEL[s
 
 export function render({ name, id, q }) {
   if (name === 'loan') return detail(loan(id));
-  if (q.get('new')) return newForm(q.get('new'));
+  if (q.get('new')) return newForm(q.get('new'), q);
   const tab = q.get('tab') || 'lent';
   const lentTab = tab === 'lent';
   const list = state.loans.filter(l => l.dir === tab).map(l => ({ l, i: loanInfo(l) }))
@@ -47,7 +47,7 @@ function avatar(name, done) {
 }
 const progress = (l, i) => Math.min(100, Math.round((i.paid + i.forgiven) / l.amount * 100));
 
-function newForm(dir) {
+function newForm(dir, q) {
   const b = balances();
   const lent = dir === 'lent';
   return `<form id="f" class="card">
@@ -67,6 +67,10 @@ function newForm(dir) {
         <div class="field"><label>Mensualité (optionnel)</label><input name="monthly" inputmode="decimal"></div></div>
         <p class="small muted">L'argent emprunté n'est <b>pas</b> un revenu : il n'est pas réparti sur les 6 comptes.</p>`}
       <div class="field"><label>Note</label><input name="note"></div>
+      <label class="check"><input type="checkbox" name="past" ${q.get('past') ? 'checked' : ''}> ${lent ? 'Prêté' : 'Emprunté'} avant d'utiliser l'application</label>
+      <p class="small muted" id="past-hint">${lent
+        ? "L'argent est déjà sorti avant tes soldes de départ : rien ne sera retiré de tes portefeuilles. Les remboursements seront ajoutés normalement."
+        : "L'argent est déjà dans tes soldes de départ : rien ne sera ajouté à tes portefeuilles. Tes remboursements seront retirés normalement."}</p>
       <p id="warn" class="small"></p>
       <button class="btn primary block">Enregistrer</button>
     </form>`;
@@ -139,11 +143,12 @@ export function mount(root, { name, id, q }) {
       const a = parseMoney(d.amount);
       if (!(a > 0)) return toast('Entre un montant');
       if (lent && jar(d.jar).rule === 'no_spend' && !(await ask(`Prêter l'argent de ${jar(d.jar).name} ?`, { ok: 'Continuer' }))) return;
-      if (lent && a > (b.w[d.wallet] || 0) && !(await ask(`${wallet(d.wallet).name} n'a que ${fmt(b.w[d.wallet])}. Continuer ?`, { ok: 'Continuer' }))) return;
+      if (lent && !d.past && a > (b.w[d.wallet] || 0) && !(await ask(`${wallet(d.wallet).name} n'a que ${fmt(b.w[d.wallet])}. Continuer ?`, { ok: 'Continuer' }))) return;
       const l = { id: uid(), dir: q.get('new'), person: d.person.trim(), amount: a, date: d.date || today(), due: d.due || '',
         wallet: d.wallet, jar: d.jar, rate: parseFloat((d.rate || '').replace(',', '.')) || 0, monthly: parseMoney(d.monthly || 0) || 0, note: d.note };
       state.loans.push(l);
-      await addTx({ type: lent ? 'loan_out' : 'debt_in', date: l.date + 'T12:00', amount: a, wallet: d.wallet, jar: d.jar, loan: l.id, note: d.note },
+      // a loan made before the opening balances is recorded for tracking only (history: no wallet/jar movement)
+      await addTx({ type: lent ? 'loan_out' : 'debt_in', date: l.date + 'T12:00', amount: a, wallet: d.wallet, jar: d.jar, loan: l.id, note: d.note, history: !!d.past || undefined },
         lent ? `Prêt à ${l.person} : ${fmt(a)}` : `Dette envers ${l.person} : ${fmt(a)}`);
       go(`#/loan/${l.id}`);
     };
