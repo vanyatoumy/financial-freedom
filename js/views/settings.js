@@ -1,6 +1,6 @@
 // Settings: split percentages, wallets, categories, favourites, backup / export.
 import { state, save, uid, replaceState } from '../store.js';
-import { fmt, today, TYPE_LABEL, wallet, jar, cat, loan, investment } from '../logic.js';
+import { fmt, today, TYPE_LABEL, wallet, jar, cat, loan, investment, userJars } from '../logic.js';
 import { esc, jarOpts, formData, toast, go, ask, icon, tile } from '../ui.js';
 import { defaultState } from '../defaults.js';
 import { ICON_NAMES } from '../icons.js';
@@ -8,7 +8,7 @@ import { ICON_NAMES } from '../icons.js';
 export function render() {
   return `<form id="pct" class="card">
       <h2>Répartition des revenus</h2>
-      ${state.jars.map(j => `<div class="count-row" style="padding:6px 0;border:0"><span class="wname">${tile(j.icon, j.color, 'mini-ico')} ${esc(j.name)}</span>
+      ${userJars().map(j => `<div class="count-row" style="padding:6px 0;border:0"><span class="wname">${tile(j.icon, j.color, 'mini-ico')} ${esc(j.name)}</span>
         <input name="${j.id}" inputmode="numeric" value="${j.pct}"><span>%</span></div>`).join('')}
       <p id="pctsum" class="small"></p>
       <p class="small muted">Les changements s'appliquent aux prochains revenus seulement.</p>
@@ -77,13 +77,13 @@ function csv() {
 export function mount(root) {
   const pf = root.querySelector('#pct');
   const sumEl = root.querySelector('#pctsum');
-  const sum = () => state.jars.reduce((s, j) => s + (parseFloat(pf[j.id].value) || 0), 0);
+  const sum = () => userJars().reduce((s, j) => s + (parseFloat(pf[j.id].value) || 0), 0);
   const show = () => { const s = sum(); sumEl.innerHTML = s === 100 ? '<span class="pos">Total 100 % ' + icon('check') + '</span>' : `<span class="neg">Total ${s} % (doit faire 100 %)</span>`; };
   pf.oninput = show; show();
   pf.onsubmit = async e => {
     e.preventDefault();
     if (sum() !== 100) return toast('Le total doit faire 100 %');
-    state.jars.forEach(j => { j.pct = parseFloat(pf[j.id].value) || 0; });
+    userJars().forEach(j => { j.pct = parseFloat(pf[j.id].value) || 0; });
     await save(); toast('Répartition sauvée');
   };
 

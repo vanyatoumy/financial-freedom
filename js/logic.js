@@ -43,6 +43,9 @@ export function fmtDate(ds, withTime = false) {
 
 // ---------- lookups ----------
 export const jar = id => state.jars.find(j => j.id === id);
+// The 6 jars the user sees (the hidden client-money reserve is left out).
+export const userJars = () => state.jars.filter(j => !j.hidden);
+export const service = id => state.services.find(s => s.id === id);
 export const wallet = id => state.wallets.find(w => w.id === id);
 export const cat = id => state.categories.find(c => c.id === id);
 export const loan = id => state.loans.find(l => l.id === id);
@@ -72,6 +75,14 @@ export function effects(tx) {
       break;
     case 'expense': case 'loan_out': case 'debt_pay': case 'invest':
       add(w, tx.wallet, -a); add(j, tx.jar, -a); break;
+    case 'svc_in': // client money received: lands in the client reserve
+      add(w, tx.wallet, a); add(j, 'cli', a); break;
+    case 'svc_out': // service bought for a client: paid out of the client reserve (goes negative when I advance it)
+      add(w, tx.wallet, -a); add(j, 'cli', -a); break;
+    case 'svc_close': // what is left in the reserve for this service is my margin (or my loss)
+      add(j, 'cli', -a);
+      if (a > 0) (tx.alloc || []).forEach(p => add(j, p.jar, p.amount)); else add(j, tx.jar || 'nec', a);
+      break;
     case 'loan_in': case 'debt_in': case 'div_collect':
       add(w, tx.wallet, a); add(j, tx.jar, a); break;
     // div_accrue (dividend earned, held by the association) and div_convert (dividends → capital)
@@ -170,8 +181,10 @@ export function transferKind(from, to) {
 export const feeWalletOf = (from, to) => (wallet(from)?.fees ? from : wallet(to)?.fees ? to : from);
 
 const FEE_KIND = { transfer: null, expense: 'Paiements', income: 'Réceptions', loan_in: 'Prêts & dettes', debt_in: 'Prêts & dettes',
-  loan_out: 'Prêts & dettes', debt_pay: 'Prêts & dettes', invest: 'Investissements', div_collect: 'Investissements' };
+  loan_out: 'Prêts & dettes', debt_pay: 'Prêts & dettes', invest: 'Investissements', div_collect: 'Investissements',
+  svc_in: 'Services clients', svc_out: 'Services clients' };
 export function feeKind(t) {
+  if (t.service) return 'Services clients';
   return t.type === 'transfer' ? (transferKind(t.wallet, t.to) === 'Envoi' ? 'Envois UBA' : transferKind(t.wallet, t.to) + 's') : FEE_KIND[t.type] || 'Autres';
 }
 
@@ -187,6 +200,20 @@ export function feeReport(from, to) {
     return Object.entries(m).sort((a, b) => (b[1].fee + b[1].tax) - (a[1].fee + a[1].tax));
   };
   return { list, fee, tax, total: fee + tax, byWallet: group(t => t.feeWallet || t.wallet), byKind: group(feeKind) };
+}
+
+// ---------- services bought for clients ----------
+// Client money in (svc_in), service paid (svc_out), and every fee/tax charged to the reserve for this service.
+export function svcInfo(s) {
+  const txs = state.tx.filter(t => t.service === s.id);
+  const sum = type => txs.filter(t => t.type === type).reduce((a, t) => a + t.amount, 0);
+  const received = sum('svc_in'), cost = sum('svc_out');
+  const fees = txs.reduce((a, t) => a + (t.fee || 0) + (t.tax || 0), 0);
+  const close = txs.find(t => t.type === 'svc_close');
+  const margin = close ? close.amount : received - cost - fees;
+  const due = s.agreed ? Math.max(0, s.agreed - received) : 0;
+  const advanced = Math.max(0, cost + fees - received); // money I put in myself and still wait for
+  return { txs, received, cost, fees, margin, due, advanced, closed: !!close };
 }
 
 // ---------- summaries ----------
@@ -205,7 +232,9 @@ export function summary() {
   }
   const invValue = state.investments.reduce((s, i) => s + investInfo(i).value, 0);
   const cash = Object.values(b.w).reduce((s, v) => s + v, 0);
-  return { b, available, protectedAmt, pending, lent, owed, invValue, cash, netWorth: cash + lent + invValue - owed };
+  const clients = b.j.cli || 0; // > 0: client money I hold · < 0: money I advanced for clients
+  return { b, available: available + Math.min(0, clients), protectedAmt, pending, lent, owed, invValue, cash, clients,
+    netWorth: cash + lent + invValue - owed - clients };
 }
 
 // Passive income vs living costs over the last 90 days.
@@ -220,8 +249,9 @@ export function freedom() {
 
 export function monthStats(ym) {
   const txs = state.tx.filter(t => t.date.startsWith(ym));
-  const income = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const spent = txs.filter(t => t.type === 'expense' || t.type === 'debt_pay').reduce((s, t) => s + t.amount, 0);
+  const margins = txs.filter(t => t.type === 'svc_close');
+  const income = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0) + margins.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+  const spent = txs.filter(t => t.type === 'expense' || t.type === 'debt_pay').reduce((s, t) => s + t.amount, 0) - margins.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0);
   const fees = txs.reduce((s, t) => s + (t.fee || 0) + (t.tax || 0), 0);
   const byJar = {};
   txs.filter(t => t.type === 'expense').forEach(t => { byJar[t.jar] = (byJar[t.jar] || 0) + t.amount; });
@@ -260,6 +290,12 @@ export function reminders() {
     if (d < 0) out.push({ level: 'danger', icon: 'clock', text: `${who} ${fmt(i.remaining)} (en retard de ${-d} j).`, action: `#/loan/${l.id}`, label: 'Voir' });
     else if (d <= 3) out.push({ level: 'warn', icon: 'clock', text: `${who} ${fmt(i.remaining)} ${d === 0 ? "aujourd'hui" : `dans ${d} j`}.`, action: `#/loan/${l.id}`, label: 'Voir' });
   }
+  for (const sv of state.services) {
+    const i = svcInfo(sv);
+    if (i.closed) continue;
+    if (i.advanced > 0) out.push({ level: 'warn', icon: 'store', text: `${sv.client} te doit ${fmt(Math.max(i.advanced, i.due))} (service ${sv.label || ''} avancé).`, action: `#/svc/${sv.id}`, label: 'Voir' });
+    else if (i.due > 0) out.push({ level: 'info', icon: 'store', text: `${sv.client} doit encore ${fmt(i.due)} pour ${sv.label || 'son service'}.`, action: `#/svc/${sv.id}`, label: 'Voir' });
+  }
   const pay = wallet('paysika');
   const activeSubs = state.subs.filter(x => x.keep);
   for (const sub of state.subs) {
@@ -292,11 +328,12 @@ export const TYPE_LABEL = {
   loan_in: 'Remboursement reçu', debt_in: 'Emprunt', debt_pay: 'Remboursement de dette', forgive: 'Prêt pardonné',
   invest: 'Contribution', adjust: 'Écart de comptage', opening: 'Solde de départ',
   div_accrue: 'Dividende à percevoir', div_collect: 'Dividendes encaissés', div_convert: 'Dividendes convertis en capital',
+  svc_in: 'Reçu du client', svc_out: 'Service payé', svc_close: 'Marge service client',
 };
 
 const TYPE_ICON = { transfer: 'transfer', jar_move: 'shuffle', loan_out: 'arrow-up-right', loan_in: 'arrow-down-left', debt_in: 'arrow-down-left',
   debt_pay: 'arrow-up-right', forgive: 'heart', invest: 'trending-up', adjust: 'scale', opening: 'flag',
-  div_accrue: 'coins', div_collect: 'download', div_convert: 'repeat' };
+  div_accrue: 'coins', div_collect: 'download', div_convert: 'repeat', svc_in: 'arrow-down-left', svc_out: 'card', svc_close: 'store' };
 export const txIcon = t => cat(t.cat)?.icon || TYPE_ICON[t.type] || 'tag';
 
 export function txTitle(t) {
@@ -305,6 +342,10 @@ export function txTitle(t) {
     case 'income': case 'expense': return t.note || c?.name || TYPE_LABEL[t.type];
     case 'transfer': return `${transferKind(t.wallet, t.to)} ${wallet(t.wallet)?.name} → ${wallet(t.to)?.name}`;
     case 'jar_move': return `${jar(t.jar)?.name} → ${jar(t.toJar)?.name}`;
+    case 'svc_in': case 'svc_out': case 'svc_close': {
+      const s = service(t.service);
+      return `${TYPE_LABEL[t.type]} · ${s ? s.client + (s.label ? ' (' + s.label + ')' : '') : ''}`;
+    }
     case 'invest': case 'div_accrue': case 'div_collect': case 'div_convert':
       return `${TYPE_LABEL[t.type]} · ${investment(t.investment)?.name || ''}`;
     case 'loan_out': case 'loan_in': case 'debt_in': case 'debt_pay': case 'forgive':

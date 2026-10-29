@@ -1,5 +1,5 @@
 import { state } from '../store.js';
-import { summary, reminders, freedom, fmt, monthStats, today, nowLocal, countStreak } from '../logic.js';
+import { userJars, summary, reminders, freedom, fmt, monthStats, today, nowLocal, countStreak } from '../logic.js';
 import { esc, addTx, icon, tile } from '../ui.js';
 
 // New users get a short guided checklist; it disappears once every step is done.
@@ -65,7 +65,7 @@ export function render() {
 
   <h3>Mes 6 comptes</h3>
   <div class="grid2">
-    ${state.jars.map(j => {
+    ${userJars().map(j => {
       const spent = m.byJar[j.id] || 0;
       return `<a class="jar" style="--c:${j.color}" href="#/jar/${j.id}">
         ${tile(j.icon, j.color, 'jar-ico')}

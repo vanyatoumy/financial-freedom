@@ -7,6 +7,8 @@ export const DEFAULT_JARS = [
   { id: 'edu', name: 'Instruction', pct: 10, color: '#ea580c', icon: 'book', rule: 'normal' },
   { id: 'fun', name: 'Amusement', pct: 10, color: '#db2777', icon: 'sparkles', rule: 'must_spend' },
   { id: 'don', name: 'Dons', pct: 10, color: '#ca8a04', icon: 'heart', rule: 'normal' },
+  // not one of the 6 jars: holds client money passing through (services bought for clients). Never split, never "available".
+  { id: 'cli', name: 'Argent clients', pct: 0, color: '#64748b', icon: 'users', rule: 'client', hidden: true },
 ];
 
 // role: spending = usable daily, online = PAYSIKA style (keep at 0), vault = locked / protected
@@ -55,12 +57,13 @@ export const DEFAULT_CATEGORIES = [
   { id: 'inv_return', kind: 'income', name: "Revenus d'investissement", icon: 'trending-up', passive: true },
   { id: 'interest', kind: 'income', name: 'Intérêts reçus', icon: 'percent', passive: true },
   { id: 'rent_in', kind: 'income', name: 'Loyer perçu', icon: 'key', passive: true },
+  { id: 'svc_margin', kind: 'income', name: 'Marge services clients', icon: 'store' },
   { id: 'other_in', kind: 'income', name: 'Autre revenu', icon: 'plus-circle' },
 ];
 
 export function defaultState() {
   return {
-    version: 3,
+    version: 4,
     settings: { setupDone: false, currency: 'F', remainderJar: 'nec', gapJar: 'nec', feeJar: 'nec' },
     jars: structuredClone(DEFAULT_JARS),
     wallets: structuredClone(DEFAULT_WALLETS),
@@ -71,5 +74,6 @@ export function defaultState() {
     subs: [],
     counts: [],
     favorites: [],
+    services: [],
   };
 }

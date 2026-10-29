@@ -51,7 +51,7 @@ export function render() {
   return `<div class="field"><select data-f="month"><option value="all" ${filter.month === 'all' ? 'selected' : ''}>Tous les mois</option>${months.map(m => `<option value="${m}" ${m === filter.month ? 'selected' : ''}>${new Date(m + '-15').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</option>`).join('')}</select></div>
     <div class="chips">${types.map(([v, l]) => `<button class="chip ${v === filter.type ? 'on' : ''}" data-type="${v}">${l}</button>`).join('')}</div>
     <div class="grid2">
-      <div class="field"><select data-f="jar">${opts(state.jars, filter.jar, { empty: 'Tous les comptes' })}</select></div>
+      <div class="field"><select data-f="jar">${opts(state.jars.filter(j => !j.hidden), filter.jar, { empty: 'Tous les comptes' })}</select></div>
       <div class="field"><select data-f="wallet">${opts(state.wallets, filter.wallet, { empty: 'Tous les portefeuilles' })}</select></div>
     </div>
     <div class="card grid2 center"><div><div class="small muted">Revenus</div><b class="pos">${fmt(inc)}</b></div><div><div class="small muted">Dépenses</div><b class="neg">${fmt(exp)}</b></div></div>

@@ -9,12 +9,18 @@ const KEY = 'state';
 export let state = defaultState();
 const listeners = new Set();
 
+// One shared connection; it closes itself if another tab or a reset needs to delete / upgrade the database.
+let dbPromise = null;
 function openDb() {
-  return new Promise((resolve, reject) => {
+  return dbPromise ||= new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onversionchange = () => { db.close(); dbPromise = null; };
+      resolve(db);
+    };
+    req.onerror = () => { dbPromise = null; reject(req.error); };
   });
 }
 
@@ -41,14 +47,21 @@ export async function load() {
 
 // v1 stored emoji icons: switch known items to the SVG icon names, unknown ones to 'tag'.
 function migrate(s) {
-  if ((s.version || 1) >= 3) return s;
+  if ((s.version || 1) >= 4) return s;
+  if ((s.version || 1) === 3) {
+    for (const d of DEFAULT_JARS) if (!s.jars.some(j => j.id === d.id)) s.jars.push(structuredClone(d));
+    for (const d of DEFAULT_CATEGORIES) if (!s.categories.some(c => c.id === d.id)) s.categories.push(structuredClone(d));
+    s.services ||= [];
+    s.version = 4;
+    return s;
+  }
   if ((s.version || 1) === 2) {
     for (const w of s.wallets) {
       const d = DEFAULT_WALLETS.find(x => x.id === w.id);
       if (d?.fees) Object.assign(w, { fees: d.fees, allowTo: d.allowTo, allowFrom: d.allowFrom });
     }
     s.version = 3;
-    return s;
+    return migrate(s);
   }
   const fix = (list, defs) => list.forEach(x => {
     const d = defs.find(y => y.id === x.id);

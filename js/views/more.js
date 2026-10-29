@@ -10,6 +10,7 @@ export function render() {
       ${item('#/loans?tab=lent', 'arrow-up-right', 'Prêts', `On me doit ${fmt(s.lent)}${late ? ` · ${late} en retard` : ''}`)}
       ${item('#/loans?tab=borrowed', 'arrow-down-left', 'Dettes', `Je dois ${fmt(s.owed)}`)}
       ${item('#/invest', 'trending-up', 'Investissements', `Valeur ${fmt(s.invValue)}`)}
+      ${item('#/svc', 'store', 'Services clients', s.clients > 0 ? `Argent clients détenu ${fmt(s.clients)}` : s.clients < 0 ? `Avancé pour des clients ${fmt(-s.clients)}` : 'Achats pour des clients, ta marge')}
       ${item('#/subs', 'repeat', 'Abonnements', `${state.subs.filter(x => x.keep).length} actif(s)`)}
       ${item('#/add?type=transfer', 'transfer', 'Retrait / Dépôt', 'OM/MOMO → CASH ou PAYSIKA, CASH → OM/MOMO, MOMO → UBA')}
       ${item('#/add?type=jar_move', 'shuffle', 'Déplacer entre comptes', 'Pour les exceptions')}

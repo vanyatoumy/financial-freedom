@@ -1,5 +1,5 @@
 import { load, onChange, state } from './store.js';
-import { jar, loan, investment } from './logic.js';
+import { jar, loan, investment, service } from './logic.js';
 import * as dashboard from './views/dashboard.js';
 import * as add from './views/add.js';
 import * as count from './views/count.js';
@@ -12,9 +12,10 @@ import * as setup from './views/setup.js';
 import * as more from './views/more.js';
 import * as jarView from './views/jar.js';
 import * as fees from './views/fees.js';
+import * as svc from './views/svc.js';
 
 const routes = {
-  '': dashboard, add, count, loans, loan: loans, invest, subs, history, settings, setup, more, jar: jarView, fees,
+  '': dashboard, add, count, loans, loan: loans, invest, subs, history, settings, setup, more, jar: jarView, fees, svc,
 };
 const navOf = { '': 'home', count: 'count', history: 'history' };
 
@@ -35,6 +36,8 @@ function meta({ name, id, q }) {
     case 'subs': return { title: 'Abonnements', back: '#/more' };
     case 'settings': return { title: 'Réglages', back: '#/more' };
     case 'fees': return { title: 'Frais & taxes', back: '#/more' };
+    case 'svc': return id ? { title: service(id)?.client || 'Service', back: '#/svc' }
+      : q.get('new') ? { title: 'Nouveau service', back: '#/svc' } : { title: 'Services clients', back: '#/more' };
     case 'jar': return { title: jar(id)?.name || 'Compte', back: '#/' };
     case 'setup': return { title: 'Bienvenue' };
     default: return { title: 'Financial Freedom' };

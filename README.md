@@ -9,6 +9,7 @@ No dependencies and no build step. Data stays on the device (IndexedDB) and the 
 - **Quick add** at any time: expense, income, withdrawal / deposit, move between jars. Also favourites (one tap from the home screen).
 - **Mobile wallets (OM, MOMO, PAYSIKA)**: every operation can carry fees and taxes (paid from Nécessité). Allowed moves only: withdrawal OM/MOMO → CASH or PAYSIKA, PAYSIKA → OM/MOMO, deposit CASH → OM/MOMO, MOMO → UBA.
 - **Fees & taxes report**: today, this month, this year or any period, by wallet and by operation.
+- **Services for clients**: client money goes into a hidden "Argent clients" reserve (never income, never available); money advanced for a client is tracked as owed to me; closing a service turns only the margin (received − cost − fees) into income split over the 6 jars.
 - **PAYSIKA one-step payment**: top-up + fee + expense in a single form. Subscription tracker with renewal alerts.
 - **Morning count**: type what each wallet holds, then explain each gap (forgotten expense, fees, interest) or record it as an unexplained gap. Shows a day streak.
 - **Loans and debts** with loan date, expected return date, partial repayments, interest, overdue alerts, and "forgive" (the rest becomes a gift paid from Dons).

@@ -1,6 +1,6 @@
 // First-run wizard: wallet balances → which jar owns that money → association investment.
 import { state, save, uid } from '../store.js';
-import { parseMoney, fmt, toInput, today, addMonths } from '../logic.js';
+import { parseMoney, fmt, toInput, today, addMonths, userJars } from '../logic.js';
 import { esc, go, formData, toast, icon, tile } from '../ui.js';
 
 const draft = { w: {}, j: {}, inv: null };
@@ -22,7 +22,7 @@ export function render({ q }) {
     <h1>À quoi sert cet argent ?</h1>
     <p class="muted">Étape 2/3 — Répartis tes <b>${fmt(total)}</b> entre les 6 comptes. Le total doit être égal.</p>
     <form id="f" class="card mt">
-      ${state.jars.map(j => `<div class="field"><label class="wname">${tile(j.icon, j.color, 'mini-ico')} ${esc(j.name)}${j.home ? ` <span class="small">(dans ${esc(state.wallets.find(w => w.id === j.home)?.name)})</span>` : ''}</label>
+      ${userJars().map(j => `<div class="field"><label class="wname">${tile(j.icon, j.color, 'mini-ico')} ${esc(j.name)}${j.home ? ` <span class="small">(dans ${esc(state.wallets.find(w => w.id === j.home)?.name)})</span>` : ''}</label>
         <input name="${j.id}" inputmode="decimal" value="${toInput(draft.j[j.id])}"></div>`).join('')}
       <p id="sum" class="small"></p>
       <div class="grid2"><a class="btn" href="#/setup?step=1">Retour</a><button class="btn primary">Suivant</button></div>
@@ -63,10 +63,10 @@ export function mount(root, { q }) {
       draft.w[w.id] = v;
     }
     // defaults: home wallets go to their jar, the rest is shared by % among the other jars
-    const homes = state.jars.filter(j => j.home);
+    const homes = userJars().filter(j => j.home);
     const homeIds = new Set(homes.map(j => j.home));
     const rest = state.wallets.filter(w => !homeIds.has(w.id)).reduce((s, w) => s + draft.w[w.id], 0);
-    const others = state.jars.filter(j => !j.home);
+    const others = userJars().filter(j => !j.home);
     const pctSum = others.reduce((s, j) => s + j.pct, 0) || 1;
     let used = 0;
     for (const j of state.jars) draft.j[j.id] = j.home ? draft.w[j.home] : Math.floor(rest * j.pct / pctSum / 100) * 100;
@@ -80,7 +80,7 @@ export function mount(root, { q }) {
     const sumEl = root.querySelector('#sum');
     const check = () => {
       const d = formData(f);
-      const s = state.jars.reduce((a, j) => a + (parseMoney(d[j.id] || 0) || 0), 0);
+      const s = userJars().reduce((a, j) => a + (parseMoney(d[j.id] || 0) || 0), 0);
       sumEl.innerHTML = s === total ? `<span class="pos">${icon('check')} Total : ${fmt(s)}</span>` : `<span class="neg">Total : ${fmt(s)} (écart ${fmt(s - total)})</span>`;
       return s === total;
     };
@@ -89,7 +89,7 @@ export function mount(root, { q }) {
       e.preventDefault();
       if (!check()) return toast('Le total des comptes doit être égal au total des portefeuilles');
       const d = formData(f);
-      state.jars.forEach(j => { draft.j[j.id] = parseMoney(d[j.id] || 0) || 0; });
+      userJars().forEach(j => { draft.j[j.id] = parseMoney(d[j.id] || 0) || 0; });
       go('#/setup?step=3');
     };
   }

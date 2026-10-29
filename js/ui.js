@@ -20,7 +20,7 @@ export function walletOpts(selected, { filter, balances } = {}) {
 }
 
 export function jarOpts(selected, balances) {
-  return state.jars.map(j => `<option value="${j.id}" ${j.id === selected ? 'selected' : ''}>${esc(j.name)}${balances ? ' · ' + fmt(balances[j.id]) : ''}</option>`).join('');
+  return state.jars.filter(j => !j.hidden).map(j => `<option value="${j.id}" ${j.id === selected ? 'selected' : ''}>${esc(j.name)}${balances ? ' · ' + fmt(balances[j.id]) : ''}</option>`).join('');
 }
 
 // Fees + taxes inputs, shown only when the chosen wallet charges them (OM, MOMO, PAYSIKA).
