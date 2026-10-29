@@ -108,6 +108,7 @@ export function loanInfo(l) {
   let paid = 0, interest = 0, forgiven = 0;
   for (const t of txs) {
     if (t.type === 'loan_in') paid += t.amount;
+    if (t.type === 'income') interest += t.amount; // interest earned on a loan I made
     if (t.type === 'debt_pay') { paid += t.amount - (t.interestPart || 0); interest += t.interestPart || 0; }
     if (t.type === 'forgive') forgiven += t.amount;
   }
