@@ -77,8 +77,7 @@ export function effects(tx) {
     // div_accrue (dividend earned, held by the association) and div_convert (dividends → capital)
     // don't touch wallets or jars: the money stays inside the investment.
     case 'transfer':
-      add(w, tx.wallet, -(a + (tx.fee || 0))); add(w, tx.to, a);
-      add(j, tx.feeJar, -(tx.fee || 0)); break;
+      add(w, tx.wallet, -a); add(w, tx.to, a); break;
     case 'jar_move': case 'forgive':
       // forgive: Dons (jar) pays for the gift, the jar the loan came from (toJar) is refunded
       add(j, tx.jar, -a); add(j, tx.toJar, a); break;
@@ -89,6 +88,9 @@ export function effects(tx) {
       Object.entries(tx.jl || {}).forEach(([k, v]) => add(j, k, v));
       break;
   }
+  // fees and taxes of any operation: taken from the wallet that charged them, paid by the fee jar (Nécessité)
+  const charges = (tx.fee || 0) + (tx.tax || 0);
+  if (charges) { add(w, tx.feeWallet || tx.wallet, -charges); add(j, tx.feeJar || state.settings.feeJar || 'nec', -charges); }
   return { w, j };
 }
 export function balances(txs = state.tx) {
@@ -150,6 +152,43 @@ export function investInfo(inv) {
   };
 }
 
+// ---------- mobile wallets: allowed moves, fees & taxes ----------
+export function canTransfer(from, to) {
+  const F = wallet(from), T = wallet(to);
+  if (!F || !T || from === to) return false;
+  const into = T.allowFrom || T.onlyFrom;
+  return (!F.allowTo || F.allowTo.includes(to)) && (!into || into.includes(from));
+}
+export function transferKind(from, to) {
+  const F = wallet(from), T = wallet(to);
+  if (T?.role === 'vault' && T.onlyFrom) return 'Envoi';
+  if (F?.fees) return 'Retrait';
+  if (T?.fees) return 'Dépôt';
+  return 'Transfert';
+}
+// The wallet that charges the fees of a transfer: the mobile wallet involved.
+export const feeWalletOf = (from, to) => (wallet(from)?.fees ? from : wallet(to)?.fees ? to : from);
+
+const FEE_KIND = { transfer: null, expense: 'Paiements', income: 'Réceptions', loan_in: 'Prêts & dettes', debt_in: 'Prêts & dettes',
+  loan_out: 'Prêts & dettes', debt_pay: 'Prêts & dettes', invest: 'Investissements', div_collect: 'Investissements' };
+export function feeKind(t) {
+  return t.type === 'transfer' ? (transferKind(t.wallet, t.to) === 'Envoi' ? 'Envois UBA' : transferKind(t.wallet, t.to) + 's') : FEE_KIND[t.type] || 'Autres';
+}
+
+// Every operation with fees or taxes between two dates (inclusive, YYYY-MM-DD).
+export function feeReport(from, to) {
+  const list = state.tx.filter(t => !t.history && ((t.fee || 0) + (t.tax || 0)) > 0 && t.date.slice(0, 10) >= from && t.date.slice(0, 10) <= to)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const fee = list.reduce((s, t) => s + (t.fee || 0), 0);
+  const tax = list.reduce((s, t) => s + (t.tax || 0), 0);
+  const group = keyOf => {
+    const m = {};
+    for (const t of list) { const k = keyOf(t); (m[k] ||= { fee: 0, tax: 0, n: 0 }); m[k].fee += t.fee || 0; m[k].tax += t.tax || 0; m[k].n++; }
+    return Object.entries(m).sort((a, b) => (b[1].fee + b[1].tax) - (a[1].fee + a[1].tax));
+  };
+  return { list, fee, tax, total: fee + tax, byWallet: group(t => t.feeWallet || t.wallet), byKind: group(feeKind) };
+}
+
 // ---------- summaries ----------
 export function summary() {
   const b = balances();
@@ -183,7 +222,7 @@ export function monthStats(ym) {
   const txs = state.tx.filter(t => t.date.startsWith(ym));
   const income = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const spent = txs.filter(t => t.type === 'expense' || t.type === 'debt_pay').reduce((s, t) => s + t.amount, 0);
-  const fees = txs.filter(t => t.type === 'transfer').reduce((s, t) => s + (t.fee || 0), 0);
+  const fees = txs.reduce((s, t) => s + (t.fee || 0) + (t.tax || 0), 0);
   const byJar = {};
   txs.filter(t => t.type === 'expense').forEach(t => { byJar[t.jar] = (byJar[t.jar] || 0) + t.amount; });
   return { income, spent: spent + fees, fees, byJar, txs };
@@ -264,7 +303,7 @@ export function txTitle(t) {
   const c = cat(t.cat);
   switch (t.type) {
     case 'income': case 'expense': return t.note || c?.name || TYPE_LABEL[t.type];
-    case 'transfer': return `${wallet(t.wallet)?.name} → ${wallet(t.to)?.name}`;
+    case 'transfer': return `${transferKind(t.wallet, t.to)} ${wallet(t.wallet)?.name} → ${wallet(t.to)?.name}`;
     case 'jar_move': return `${jar(t.jar)?.name} → ${jar(t.toJar)?.name}`;
     case 'invest': case 'div_accrue': case 'div_collect': case 'div_convert':
       return `${TYPE_LABEL[t.type]} · ${investment(t.investment)?.name || ''}`;

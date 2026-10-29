@@ -35,6 +35,7 @@ export function render() {
       t.jar && t.type === 'expense' ? `<span style="color:${jar(t.jar)?.color}">${esc(jar(t.jar)?.name)}</span>` : '',
       t.person ? esc(t.person) : '',
       t.fee ? 'frais ' + fmt(t.fee) : '',
+      t.tax ? 'taxe ' + fmt(t.tax) : '',
       t.history ? 'historique' : '',
     ].filter(Boolean).join(' · ');
     const c = cat(t.cat);

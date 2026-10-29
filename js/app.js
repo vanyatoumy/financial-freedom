@@ -11,9 +11,10 @@ import * as settings from './views/settings.js';
 import * as setup from './views/setup.js';
 import * as more from './views/more.js';
 import * as jarView from './views/jar.js';
+import * as fees from './views/fees.js';
 
 const routes = {
-  '': dashboard, add, count, loans, loan: loans, invest, subs, history, settings, setup, more, jar: jarView,
+  '': dashboard, add, count, loans, loan: loans, invest, subs, history, settings, setup, more, jar: jarView, fees,
 };
 const navOf = { '': 'home', count: 'count', history: 'history' };
 
@@ -33,6 +34,7 @@ function meta({ name, id, q }) {
       : q.get('new') ? { title: 'Nouvel investissement', back: '#/invest' } : { title: 'Investissements', back: '#/more' };
     case 'subs': return { title: 'Abonnements', back: '#/more' };
     case 'settings': return { title: 'Réglages', back: '#/more' };
+    case 'fees': return { title: 'Frais & taxes', back: '#/more' };
     case 'jar': return { title: jar(id)?.name || 'Compte', back: '#/' };
     case 'setup': return { title: 'Bienvenue' };
     default: return { title: 'Financial Freedom' };

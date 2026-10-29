@@ -11,8 +11,9 @@ export function render() {
       ${item('#/loans?tab=borrowed', 'arrow-down-left', 'Dettes', `Je dois ${fmt(s.owed)}`)}
       ${item('#/invest', 'trending-up', 'Investissements', `Valeur ${fmt(s.invValue)}`)}
       ${item('#/subs', 'repeat', 'Abonnements', `${state.subs.filter(x => x.keep).length} actif(s)`)}
-      ${item('#/add?type=transfer', 'transfer', 'Transfert entre portefeuilles', 'OM → MOMO, MOMO → UBA, retrait…')}
+      ${item('#/add?type=transfer', 'transfer', 'Retrait / Dépôt', 'OM/MOMO → CASH ou PAYSIKA, CASH → OM/MOMO, MOMO → UBA')}
       ${item('#/add?type=jar_move', 'shuffle', 'Déplacer entre comptes', 'Pour les exceptions')}
+      ${item('#/fees?p=month', 'receipt', 'Frais & taxes', 'Bilan par jour, mois, année ou période')}
       ${item('#/settings', 'sliders', 'Réglages', 'Pourcentages, portefeuilles, sauvegarde')}
     </div>`;
 }

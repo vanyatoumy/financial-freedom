@@ -41,7 +41,15 @@ export async function load() {
 
 // v1 stored emoji icons: switch known items to the SVG icon names, unknown ones to 'tag'.
 function migrate(s) {
-  if ((s.version || 1) >= 2) return s;
+  if ((s.version || 1) >= 3) return s;
+  if ((s.version || 1) === 2) {
+    for (const w of s.wallets) {
+      const d = DEFAULT_WALLETS.find(x => x.id === w.id);
+      if (d?.fees) Object.assign(w, { fees: d.fees, allowTo: d.allowTo, allowFrom: d.allowFrom });
+    }
+    s.version = 3;
+    return s;
+  }
   const fix = (list, defs) => list.forEach(x => {
     const d = defs.find(y => y.id === x.id);
     if (d) { x.icon = d.icon; if (d.color && !x.color) x.color = d.color; }
@@ -50,7 +58,7 @@ function migrate(s) {
   fix(s.jars, DEFAULT_JARS); fix(s.wallets, DEFAULT_WALLETS); fix(s.categories, DEFAULT_CATEGORIES);
   s.favorites.forEach(f => { f.label = f.label.replace(/^\S+\s/, ''); });
   s.version = 2;
-  return s;
+  return migrate(s);
 }
 
 export async function save() {

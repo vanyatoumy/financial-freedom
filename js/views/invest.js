@@ -1,7 +1,7 @@
 // Investment portfolio: capital paid in vs commitment, dividends earned / held / collected, next expected dividend.
 import { state, save, uid } from '../store.js';
 import { parseMoney, fmt, toInput, investInfo, investment, today, nowLocal, fmtDate, addMonths, daysBetween, balances, wallet, freedom } from '../logic.js';
-import { esc, walletOpts, jarOpts, addTx, formData, go, toast, ask, icon, tile, emptyState, celebrate } from '../ui.js';
+import { esc, walletOpts, jarOpts, addTx, formData, go, toast, ask, icon, tile, emptyState, celebrate, feeFields, showFees, feeVals } from '../ui.js';
 
 const TYPES = { association: 'Association', business: 'Business', land: 'Terrain / Immobilier', stocks: 'Actions', tontine: 'Tontine', other: 'Autre' };
 
@@ -104,6 +104,7 @@ function detail(inv) {
           <div class="field"><label>Reçu sur</label><select name="wallet">${walletOpts('momo', { balances: b.w })}</select></div>
           <div class="field"><label>Compte</label><select name="jar">${jarOpts('inv')}</select></div>
         </div>
+        ${feeFields('momo')}
         <button class="btn primary block">Encaisser</button>
       </form>
     </div>` : ''}
@@ -115,6 +116,7 @@ function detail(inv) {
           <div class="field"><label>Montant</label><input name="amount" inputmode="decimal"></div>
           <div class="field"><label>Depuis</label><select name="wallet">${walletOpts('caisse', { balances: b.w })}</select></div>
         </div>
+        ${feeFields('caisse')}
         <button class="btn primary block">Verser</button>
       </form>
     </details>
@@ -192,7 +194,7 @@ export function mount(root, { id, q }) {
     const a = parseMoney(d.amount), max = investInfo(inv).pending;
     if (!(a > 0)) return toast('Entre un montant');
     if (a > max) return toast(`Maximum ${fmt(max)}`);
-    await addTx({ type: 'div_collect', date: nowLocal(), amount: a, wallet: d.wallet, jar: d.jar, investment: inv.id, note: inv.name },
+    await addTx({ type: 'div_collect', date: nowLocal(), amount: a, wallet: d.wallet, jar: d.jar, investment: inv.id, note: inv.name, ...feeVals(d, d.wallet) },
       `Encaissé : ${fmt(a)} sur ${wallet(d.wallet).name}`);
   };
   const conv = root.querySelector('#convert');
@@ -203,12 +205,14 @@ export function mount(root, { id, q }) {
   };
 
   const addm = root.querySelector('#addm');
+  addm.onchange = () => showFees(addm, addm.wallet.value);
+  if (col) col.onchange = () => showFees(col, col.wallet.value);
   addm.onsubmit = async e => {
     e.preventDefault();
     const d = formData(addm);
     const a = parseMoney(d.amount);
     if (!(a > 0)) return toast('Entre un montant');
-    await addTx({ type: 'invest', date: nowLocal(), amount: a, wallet: d.wallet, jar: 'inv', investment: inv.id, note: inv.name }, `Contribution : ${fmt(a)}`);
+    await addTx({ type: 'invest', date: nowLocal(), amount: a, wallet: d.wallet, jar: 'inv', investment: inv.id, note: inv.name, ...feeVals(d, d.wallet) }, `Contribution : ${fmt(a)}`);
   };
 
   const ed = root.querySelector('#edit');

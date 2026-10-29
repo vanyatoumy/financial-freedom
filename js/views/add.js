@@ -1,9 +1,9 @@
 // Quick add: expense, income, wallet transfer (with fee) and move between jars.
 import { state, uid } from '../store.js';
-import { parseMoney, fmt, toInput, nowLocal, addMonths, split, balances, summary, cat, jar, wallet } from '../logic.js';
-import { esc, walletOpts, jarOpts, addTx, formData, go, toast, ask, haptic, icon, celebrate } from '../ui.js';
+import { parseMoney, fmt, toInput, nowLocal, addMonths, split, balances, summary, cat, jar, wallet, canTransfer, transferKind, feeWalletOf } from '../logic.js';
+import { esc, walletOpts, jarOpts, addTx, formData, go, toast, ask, haptic, icon, celebrate, feeFields, showFees, feeVals } from '../ui.js';
 
-const TYPES = [['expense', 'Dépense'], ['income', 'Revenu'], ['transfer', 'Transfert'], ['jar_move', 'Comptes']];
+const TYPES = [['expense', 'Dépense'], ['income', 'Revenu'], ['transfer', 'Retrait/Dépôt'], ['jar_move', 'Comptes']];
 
 function persons() {
   return [...new Set([...state.tx.map(t => t.person), ...state.loans.map(l => l.person)].filter(Boolean))].sort();
@@ -62,15 +62,16 @@ export function render({ q }) {
     return screen(seg, amount, `
       <label>Catégorie</label>${catChips('expense', c0)}<input type="hidden" name="cat" value="${c0}">
       <label>Payé avec</label>${walletChips(q.get('wallet') || last, b, usable)}
+      ${feeFields(q.get('wallet') || last)}
       <div class="field"><label>Pris sur le compte</label><select name="jar">${jarOpts(q.get('jar') || cat(c0)?.jar || 'nec', b.j)}</select></div>
       <div class="field" id="person-f" ${cat(c0)?.person ? '' : 'hidden'}><label>Personne</label>
         <input name="person" list="persons" placeholder="ex. Maman"><datalist id="persons">${persons().map(p => `<option value="${esc(p)}">`).join('')}</datalist></div>
       <div class="card" id="topup" hidden>
         <label class="check"><input type="checkbox" name="topup" checked> ${icon('card')} Recharger PAYSIKA d'abord</label>
         <div class="grid2 mt">
-          <div class="field"><label>Depuis</label><select name="topFrom">${walletOpts('om', { filter: w => w.role === 'spending', balances: b.w })}</select></div>
-          <div class="field"><label>Frais</label><input name="topFee" inputmode="decimal" placeholder="0"></div>
+          <div class="field"><label>Depuis</label><select name="topFrom">${walletOpts('om', { filter: w => canTransfer(w.id, 'paysika'), balances: b.w })}</select></div>
         </div>
+        ${feeFields('om', 'top')}
       </div>`,
       `${noteField}${dateField}<label class="check"><input type="checkbox" name="fav"> ${icon('star')} Ajouter aux favoris</label>`,
       'Enregistrer la dépense');
@@ -82,6 +83,7 @@ export function render({ q }) {
     return screen(seg, amount, `
       <label>Source</label>${catChips('income', c0)}<input type="hidden" name="cat" value="${c0}">
       <label>Reçu sur</label>${walletChips(q.get('wallet') || last, b)}
+      ${feeFields(q.get('wallet') || last)}
       <div class="seg" id="mode">
         <button type="button" data-mode="split" class="${j0 ? '' : 'on'}">Répartir sur les 6</button>
         <button type="button" data-mode="one" class="${j0 ? 'on' : ''}">Un seul compte</button>
@@ -99,15 +101,13 @@ export function render({ q }) {
     const from = q.get('wallet') || (wallet(to)?.onlyFrom?.[0]) || (to === 'cash' ? 'om' : 'cash');
     return screen(seg, amount, `
       <div class="grid2">
-        <div class="field"><label>De</label><select name="wallet">${walletOpts(from, { balances: b.w })}</select></div>
-        <div class="field"><label>Vers</label><select name="to">${walletOpts(to, { balances: b.w })}</select></div>
+        <div class="field"><label>De</label><select name="wallet">${walletOpts(from, { filter: w => state.wallets.some(x => canTransfer(w.id, x.id)), balances: b.w })}</select></div>
+        <div class="field"><label>Vers</label><select name="to"></select></div>
       </div>
-      <div class="grid2">
-        <div class="field"><label>Frais</label><input name="fee" inputmode="decimal" placeholder="0"></div>
-        <div class="field"><label>Frais payés par</label><select name="feeJar">${jarOpts(state.settings.feeJar || 'nec')}</select></div>
-      </div>
-      <p class="small muted">Un transfert change seulement l'endroit où est l'argent. Les frais comptent comme une dépense.</p>`,
-      `${noteField}${dateField}`, 'Enregistrer le transfert');
+      <p class="small" id="kind"></p>
+      ${feeFields(feeWalletOf(from, to))}
+      <p class="small muted">Seuls les retraits (OM/MOMO → CASH ou PAYSIKA, PAYSIKA → OM/MOMO), les dépôts (CASH → OM/MOMO) et l'envoi MOMO → UBA sont possibles. Frais et taxes sont pris sur Nécessité.</p>`,
+      `${noteField}${dateField}`, 'Enregistrer');
   }
 
   return screen(seg, amount, `
@@ -168,11 +168,24 @@ export function mount(root, { q }) {
     update();
   });
 
+  if (type === 'transfer') {
+    const wantTo = q.get('to') || 'cash';
+    const fillTo = () => {
+      const from = f.wallet.value, cur = f.to.value || wantTo;
+      const targets = state.wallets.filter(w => canTransfer(from, w.id));
+      f.to.innerHTML = targets.map(w => `<option value="${w.id}" ${w.id === cur ? 'selected' : ''}>${esc(w.name)} · ${fmt(b.w[w.id])}</option>`).join('');
+    };
+    fillTo();
+    f.wallet.addEventListener('change', fillTo);
+  }
+
   function update() {
     const a = amt() || 0;
     const warn = root.querySelector('#warn');
     warn.innerHTML = '';
+    if (type === 'expense' || type === 'income') showFees(root, f.wallet.value);
     if (type === 'expense') {
+      showFees(root, f.topFrom.value, '#topup [data-fees]');
       const isPay = f.wallet.value === 'paysika';
       root.querySelector('#topup').hidden = !isPay;
       if (isPay && !f.dataset.touched) f.topup.checked = (b.w.paysika || 0) < a;
@@ -191,10 +204,10 @@ export function mount(root, { q }) {
       p.innerHTML = `<div class="split-preview">${split(a).map(x => `<span class="sp-name" style="--c:${jar(x.jar).color}">${icon(jar(x.jar).icon)} ${esc(jar(x.jar).name)}</span><b>${fmt(x.amount)}</b>`).join('')}</div>`;
     }
     if (type === 'transfer') {
-      const to = wallet(f.to.value), from = f.wallet.value;
-      warn.innerHTML = to.onlyFrom && !to.onlyFrom.includes(from)
-        ? `<span class="neg">${icon('alert')} Seul ${to.onlyFrom.map(x => wallet(x).name).join(', ')} peut envoyer vers ${esc(to.name)}. Fais d'abord ${esc(wallet(from).name)} → ${esc(wallet(to.onlyFrom[0]).name)}.</span>`
-        : from === to.id ? '<span class="neg">Choisis deux portefeuilles différents.</span>' : '';
+      const from = f.wallet.value, to = f.to.value;
+      root.querySelector('#kind').innerHTML = to ? `<b>${transferKind(from, to)}</b> ${esc(wallet(from).name)} → ${esc(wallet(to).name)}` : '';
+      showFees(root, feeWalletOf(from, to));
+      if (a > (b.w[from] || 0)) warn.innerHTML = `<span class="neg">${icon('alert')} ${esc(wallet(from).name)} n'a que ${fmt(b.w[from])}.</span>`;
     }
   }
   f.oninput = e => { if (e.target.name === 'topup') f.dataset.touched = 1; update(); };
@@ -215,22 +228,21 @@ export function mount(root, { q }) {
       if (a > (b.j[d.jar] || 0) && j.rule !== 'no_spend' && !(await ask(`${j.name} n'a que ${fmt(b.j[d.jar])}. Continuer ?`, { ok: 'Continuer' }))) return;
       const list = [];
       if (d.wallet === 'paysika' && d.topup) {
-        const fee = parseMoney(d.topFee || 0) || 0;
         const need = Math.max(0, a - Math.max(0, b.w.paysika || 0));
-        list.push({ type: 'transfer', date, amount: need, wallet: d.topFrom, to: 'paysika', fee, feeJar: state.settings.feeJar || 'nec', note: 'Recharge PAYSIKA' });
+        list.push({ type: 'transfer', date, amount: need, wallet: d.topFrom, to: 'paysika', ...feeVals(d, d.topFrom, 'top'), note: 'Recharge PAYSIKA' });
       }
-      list.push({ type: 'expense', date, amount: a, wallet: d.wallet, jar: d.jar, cat: d.cat, person: d.person?.trim() || undefined, note });
+      list.push({ type: 'expense', date, amount: a, wallet: d.wallet, jar: d.jar, cat: d.cat, person: d.person?.trim() || undefined, note, ...feeVals(d, d.wallet) });
       if (d.fav) state.favorites.push({ id: uid(), label: note || cat(d.cat).name, amount: a, wallet: d.wallet, jar: d.jar, cat: d.cat, note });
       if (d.wallet !== 'paysika') state.settings.lastWallet = d.wallet;
       const sub = state.subs.find(s => s.id === q.get('sub'));
       if (sub) sub.next = sub.cycle === 'yearly' ? addMonths(sub.next, 12) : addMonths(sub.next, 1);
-      await addTx(list.filter(t => t.amount > 0 || t.fee > 0), `Dépense : ${fmt(a)}`);
+      await addTx(list.filter(t => t.amount > 0 || t.fee > 0 || t.tax > 0), `Dépense : ${fmt(a)}`);
     }
 
     if (type === 'income') {
       const alloc = d.mode === 'one' ? [{ jar: d.jar, amount: a }] : split(a);
       state.settings.lastWallet = d.wallet;
-      const items = await addTx({ type: 'income', date, amount: a, wallet: d.wallet, cat: d.cat, passive: !!d.passive, alloc, note }, `Revenu : ${fmt(a)}`, { quiet: true });
+      const items = await addTx({ type: 'income', date, amount: a, wallet: d.wallet, cat: d.cat, passive: !!d.passive, alloc, note, ...feeVals(d, d.wallet) }, `Revenu : ${fmt(a)}`, { quiet: true });
       // peak moment: show where every franc went, then the one follow-up action (put protected money in its home)
       const pending = summary().pending[0];
       const v = await celebrate({
@@ -248,11 +260,9 @@ export function mount(root, { q }) {
     }
 
     if (type === 'transfer') {
-      const to = wallet(d.to);
-      if (d.to === d.wallet) return toast('Choisis deux portefeuilles différents');
-      if (to.onlyFrom && !to.onlyFrom.includes(d.wallet)) return toast(`Seul ${wallet(to.onlyFrom[0]).name} peut envoyer vers ${to.name}`);
-      const fee = parseMoney(d.fee || 0) || 0;
-      await addTx({ type: 'transfer', date, amount: a, wallet: d.wallet, to: d.to, fee, feeJar: d.feeJar, note }, `Transfert : ${fmt(a)}`);
+      if (!canTransfer(d.wallet, d.to)) return toast(`${wallet(d.wallet).name} → ${wallet(d.to)?.name || '?'} n'est pas autorisé`);
+      const kind = transferKind(d.wallet, d.to);
+      await addTx({ type: 'transfer', date, amount: a, wallet: d.wallet, to: d.to, ...feeVals(d, feeWalletOf(d.wallet, d.to)), note }, `${kind} : ${fmt(a)}`);
     }
 
     if (type === 'jar_move') {

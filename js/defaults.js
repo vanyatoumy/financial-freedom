@@ -10,10 +10,15 @@ export const DEFAULT_JARS = [
 ];
 
 // role: spending = usable daily, online = PAYSIKA style (keep at 0), vault = locked / protected
+// fees: every operation can carry fees and taxes. allowTo / allowFrom: the only transfers allowed out of / into the wallet
+// (withdrawal OM/MOMO → CASH or PAYSIKA, PAYSIKA → OM/MOMO, deposit CASH → OM/MOMO, MOMO → UBA).
 export const DEFAULT_WALLETS = [
-  { id: 'om', name: 'OM', icon: 'smartphone', color: '#f97316', role: 'spending', decimals: true, daily: true },
-  { id: 'momo', name: 'MOMO', icon: 'smartphone', color: '#eab308', role: 'spending', decimals: true, daily: true },
-  { id: 'paysika', name: 'PAYSIKA', icon: 'card', color: '#6366f1', role: 'online', decimals: true, daily: true },
+  { id: 'om', name: 'OM', icon: 'smartphone', color: '#f97316', role: 'spending', decimals: true, daily: true,
+    fees: true, allowTo: ['cash', 'paysika'], allowFrom: ['cash', 'paysika'] },
+  { id: 'momo', name: 'MOMO', icon: 'smartphone', color: '#eab308', role: 'spending', decimals: true, daily: true,
+    fees: true, allowTo: ['cash', 'paysika', 'uba'], allowFrom: ['cash', 'paysika'] },
+  { id: 'paysika', name: 'PAYSIKA', icon: 'card', color: '#6366f1', role: 'online', decimals: true, daily: true,
+    fees: true, allowTo: ['om', 'momo'], allowFrom: ['om', 'momo'] },
   { id: 'cash', name: 'CASH', icon: 'banknote', color: '#16a34a', role: 'spending', decimals: false, daily: true },
   { id: 'uba', name: 'UBA', icon: 'lock', color: '#dc2626', role: 'vault', decimals: true, daily: false,
     onlyFrom: ['momo'], interestPct: 1.3, interestDates: ['01-06', '07-06'] },
@@ -55,7 +60,7 @@ export const DEFAULT_CATEGORIES = [
 
 export function defaultState() {
   return {
-    version: 2,
+    version: 3,
     settings: { setupDone: false, currency: 'F', remainderJar: 'nec', gapJar: 'nec', feeJar: 'nec' },
     jars: structuredClone(DEFAULT_JARS),
     wallets: structuredClone(DEFAULT_WALLETS),

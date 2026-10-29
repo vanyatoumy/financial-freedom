@@ -1,6 +1,6 @@
 // Small rendering helpers shared by the views.
 import { state, save, uid } from './store.js';
-import { fmt, jar, wallet } from './logic.js';
+import { fmt, jar, wallet, parseMoney } from './logic.js';
 import { icon } from './icons.js';
 export { icon };
 
@@ -23,7 +23,24 @@ export function jarOpts(selected, balances) {
   return state.jars.map(j => `<option value="${j.id}" ${j.id === selected ? 'selected' : ''}>${esc(j.name)}${balances ? ' · ' + fmt(balances[j.id]) : ''}</option>`).join('');
 }
 
-export const jarTag = id => { const j = jar(id); return j ? `<span style="color:${j.color}">${icon(j.icon)} ${esc(j.name)}</span>` : ''; };
+// Fees + taxes inputs, shown only when the chosen wallet charges them (OM, MOMO, PAYSIKA).
+export function feeFields(walletId, prefix = '') {
+  return `<div class="grid2" data-fees ${wallet(walletId)?.fees ? '' : 'hidden'}>
+    <div class="field"><label>Frais</label><input name="${prefix}fee" inputmode="decimal" placeholder="0"></div>
+    <div class="field"><label>Taxe</label><input name="${prefix}tax" inputmode="decimal" placeholder="0"></div></div>`;
+}
+export function showFees(root, walletId, sel = '[data-fees]') {
+  const box = root.querySelector(sel);
+  if (box) box.hidden = !wallet(walletId)?.fees;
+}
+// { fee, tax } in centimes, only when the wallet charges fees; zero values are left out of the saved operation.
+export function feeVals(d, walletId, prefix = '') {
+  if (!wallet(walletId)?.fees) return {};
+  const fee = parseMoney(d[prefix + 'fee'] || 0) || 0, tax = parseMoney(d[prefix + 'tax'] || 0) || 0;
+  return { ...(fee ? { fee } : {}), ...(tax ? { tax } : {}), ...(fee || tax ? { feeWallet: walletId } : {}) };
+}
+
+export const jarTag =id => { const j = jar(id); return j ? `<span style="color:${j.color}">${icon(j.icon)} ${esc(j.name)}</span>` : ''; };
 export const walletName = id => esc(wallet(id)?.name || '');
 
 let toastTimer;

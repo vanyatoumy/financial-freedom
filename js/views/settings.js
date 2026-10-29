@@ -62,12 +62,12 @@ function download(name, text, type) {
 }
 
 function csv() {
-  const head = ['Date', 'Type', 'Montant', 'Portefeuille', 'Vers', 'Frais', 'Compte', 'Vers compte', 'Catégorie', 'Personne', 'Prêt/Dette', 'Investissement', 'Passif', 'Note'];
+  const head = ['Date', 'Type', 'Montant', 'Portefeuille', 'Vers', 'Frais', 'Taxe', 'Compte', 'Vers compte', 'Catégorie', 'Personne', 'Prêt/Dette', 'Investissement', 'Passif', 'Note'];
   const n = c => ((c || 0) / 100).toString().replace('.', ',');
   const q = s => `"${String(s ?? '').replace(/"/g, '""')}"`;
   const rows = [...state.tx].sort((a, b) => a.date.localeCompare(b.date)).map(t => [
     t.date.replace('T', ' '), TYPE_LABEL[t.type], t.type === 'opening' ? n(Object.values(t.wl || {}).reduce((s, v) => s + v, 0)) : n(t.amount),
-    wallet(t.wallet)?.name, wallet(t.to)?.name, t.fee ? n(t.fee) : '',
+    wallet(t.wallet)?.name, wallet(t.to)?.name, t.fee ? n(t.fee) : '', t.tax ? n(t.tax) : '',
     t.alloc ? t.alloc.map(p => `${jar(p.jar)?.name} ${n(p.amount)}`).join(' / ') : jar(t.jar)?.name, jar(t.toJar)?.name,
     cat(t.cat)?.name, t.person, loan(t.loan)?.person, investment(t.investment)?.name, t.passive ? 'oui' : '', t.note,
   ].map(q).join(';'));

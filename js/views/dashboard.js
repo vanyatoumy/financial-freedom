@@ -89,7 +89,7 @@ export function render() {
   <div class="card grid3 center">
     <div class="stat"><span class="label">Revenus</span><b class="num pos">${fmt(m.income)}</b></div>
     <div class="stat"><span class="label">Dépenses</span><b class="num">${fmt(m.spent)}</b></div>
-    <div class="stat"><span class="label">Frais</span><b class="num">${fmt(m.fees)}</b></div>
+    <a class="stat" href="#/fees?p=month" style="color:inherit"><span class="label">Frais & taxes ›</span><b class="num">${fmt(m.fees)}</b></a>
   </div>`;
 }
 

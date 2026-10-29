@@ -1,7 +1,7 @@
 // Loans (money I lent) and debts (money I borrowed), with due dates and repayments.
 import { state, save, uid } from '../store.js';
 import { parseMoney, fmt, split, loanInfo, STATUS_LABEL, today, nowLocal, fmtDate, daysBetween, loan, wallet, jar, balances } from '../logic.js';
-import { esc, walletOpts, jarOpts, addTx, formData, go, toast, ask, icon, emptyState, celebrate } from '../ui.js';
+import { esc, walletOpts, jarOpts, addTx, formData, go, toast, ask, icon, emptyState, celebrate, feeFields, showFees, feeVals } from '../ui.js';
 
 const people = () => [...new Set([...state.loans.map(l => l.person), ...state.tx.map(t => t.person)].filter(Boolean))].sort();
 const badge = st => `<span class="badge ${STATUS_LABEL[st][1]}">${STATUS_LABEL[st][0]}</span>`;
@@ -62,6 +62,7 @@ function newForm(dir, q) {
         <div class="field"><label>${lent ? "Sorti de" : 'Reçu sur'}</label><select name="wallet">${walletOpts(state.settings.lastWallet || 'om', { filter: w => w.role !== 'vault', balances: b.w })}</select></div>
         <div class="field"><label>${lent ? 'Pris sur le compte' : 'Mis dans le compte'}</label><select name="jar">${jarOpts('nec', b.j)}</select></div>
       </div>
+      ${feeFields(state.settings.lastWallet || 'om')}
       ${lent ? '' : `<div class="grid2">
         <div class="field"><label>Taux d'intérêt (%/an)</label><input name="rate" inputmode="decimal" placeholder="0"></div>
         <div class="field"><label>Mensualité (optionnel)</label><input name="monthly" inputmode="decimal"></div></div>
@@ -115,6 +116,7 @@ function detail(l) {
         <div class="field"><label>${lent ? 'Reçu sur' : 'Payé avec'}</label><select name="wallet">${walletOpts(l.wallet, { filter: w => w.role !== 'vault', balances: b.w })}</select></div>
         <div class="field"><label>Compte</label><select name="jar">${jarOpts(l.jar, b.j)}</select></div>
       </div>
+      ${feeFields(l.wallet)}
       <div class="field"><label>${lent ? 'Dont intérêts gagnés' : 'Dont intérêts'}</label><input name="interest" inputmode="decimal" placeholder="0"></div>
       <div class="field"><label>Date</label><input type="datetime-local" name="date" value="${nowLocal()}"></div>
       <button class="btn primary block">Enregistrer</button>
@@ -134,6 +136,7 @@ export function mount(root, { name, id, q }) {
     const lent = q.get('new') === 'lent';
     const b = balances();
     const upd = () => {
+      showFees(root, f.past.checked ? '' : f.wallet.value);
       const j = jar(f.jar.value);
       root.querySelector('#warn').innerHTML = lent && j.rule === 'no_spend' ? `<span class="neg">${icon('alert')} Évite de prêter l'argent de ${esc(j.name)}.</span>` : '';
     };
@@ -149,7 +152,7 @@ export function mount(root, { name, id, q }) {
         wallet: d.wallet, jar: d.jar, rate: parseFloat((d.rate || '').replace(',', '.')) || 0, monthly: parseMoney(d.monthly || 0) || 0, note: d.note };
       state.loans.push(l);
       // a loan made before the opening balances is recorded for tracking only (history: no wallet/jar movement)
-      await addTx({ type: lent ? 'loan_out' : 'debt_in', date: l.date + 'T12:00', amount: a, wallet: d.wallet, jar: d.jar, loan: l.id, note: d.note, history: !!d.past || undefined },
+      await addTx({ type: lent ? 'loan_out' : 'debt_in', date: l.date + 'T12:00', amount: a, wallet: d.wallet, jar: d.jar, loan: l.id, note: d.note, history: !!d.past || undefined, ...(d.past ? {} : feeVals(d, d.wallet)) },
         lent ? `Prêt à ${l.person} : ${fmt(a)}` : `Dette envers ${l.person} : ${fmt(a)}`);
       go(`#/loan/${l.id}`);
     };
@@ -159,6 +162,7 @@ export function mount(root, { name, id, q }) {
   const l = loan(id); if (!l) return;
   const lent = l.dir === 'lent';
   const pay = root.querySelector('#pay');
+  if (pay) pay.onchange = () => showFees(pay, pay.wallet.value);
   if (pay) pay.onsubmit = async e => {
     e.preventDefault();
     const d = formData(pay);
@@ -174,6 +178,7 @@ export function mount(root, { name, id, q }) {
          { type: 'income', date, amount: interestPart, wallet: d.wallet, cat: 'interest', passive: true, alloc: split(interestPart), loan: l.id, note: `Intérêts · ${l.person}` }]
         .filter(t => t.amount > 0)
       : [{ type: 'debt_pay', date, amount: a, wallet: d.wallet, jar: d.jar, loan: l.id, interestPart }];
+    Object.assign(list[0], feeVals(d, d.wallet)); // fees and taxes of the operation, once
     const items = await addTx(list,
       `Remboursement : ${fmt(a)}`, { quiet: loanInfo(l).remaining === 0 });
     // peak moment: a loan fully paid back / a debt cleared
