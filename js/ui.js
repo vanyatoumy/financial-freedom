@@ -1,6 +1,6 @@
 // Small rendering helpers shared by the views.
 import { state, save, uid } from './store.js';
-import { fmt, jar, wallet, parseMoney } from './logic.js';
+import { fmt, jar, wallet, parseMoney, toInput } from './logic.js';
 import { icon } from './icons.js';
 export { icon };
 
@@ -24,10 +24,10 @@ export function jarOpts(selected, balances) {
 }
 
 // Fees + taxes inputs, shown only when the chosen wallet charges them (OM, MOMO, PAYSIKA).
-export function feeFields(walletId, prefix = '') {
+export function feeFields(walletId, prefix = '', vals = {}) {
   return `<div class="grid2" data-fees ${wallet(walletId)?.fees ? '' : 'hidden'}>
-    <div class="field"><label>Frais</label><input name="${prefix}fee" inputmode="decimal" placeholder="0"></div>
-    <div class="field"><label>Taxe</label><input name="${prefix}tax" inputmode="decimal" placeholder="0"></div></div>`;
+    <div class="field"><label>Frais</label><input name="${prefix}fee" inputmode="decimal" placeholder="0" value="${toInput(vals.fee)}"></div>
+    <div class="field"><label>Taxe</label><input name="${prefix}tax" inputmode="decimal" placeholder="0" value="${toInput(vals.tax)}"></div></div>`;
 }
 export function showFees(root, walletId, sel = '[data-fees]') {
   const box = root.querySelector(sel);
@@ -60,7 +60,7 @@ export function enableSwipe(root) {
   root.querySelectorAll('.swipe .row').forEach(row => {
     let x0 = 0, y0 = 0, dx = 0, base = 0, active = false, horizontal = null;
     row.addEventListener('pointerdown', e => {
-      x0 = e.clientX; y0 = e.clientY; dx = 0; active = true; horizontal = null;
+      x0 = e.clientX; y0 = e.clientY; dx = 0; active = true; horizontal = null; delete row.dataset.swiped;
       base = row.classList.contains('open') ? OPEN : 0;
     });
     row.addEventListener('pointermove', e => {
@@ -75,6 +75,7 @@ export function enableSwipe(root) {
     const end = () => {
       if (!active) return;
       active = false;
+      if (horizontal) row.dataset.swiped = '1';
       row.classList.remove('dragging');
       if (horizontal) {
         const open = base + dx < OPEN / 2;

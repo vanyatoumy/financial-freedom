@@ -29,6 +29,6 @@ export function render({ id }) {
     <div class="card grid2 center"><div><div class="small muted">Entré ce mois</div><b class="pos">${fmt(inM)}</b></div><div><div class="small muted">Sorti ce mois</div><b class="neg">${fmt(outM)}</b></div></div>
     ${j.rule === 'no_spend' ? `<a class="btn block" href="#/invest">${icon('trending-up')} Voir mes investissements</a>` : `<a class="btn block" href="#/add?type=expense&jar=${j.id}&back=%23%2Fjar%2F${j.id}">${icon('minus')} Dépenser depuis ce compte</a>`}
     <h3 class="mt">Mouvements</h3>
-    <div class="card tight">${moves.slice(0, 200).map(({ t, v }) => `<div class="row"><div class="l"><div class="t">${esc(txTitle(t))}</div><div class="s">${fmtDate(t.date, true)}</div></div>
-      <div class="r ${v > 0 ? 'pos' : 'neg'}">${fmt(v, { sign: true })}</div></div>`).join('') || emptyState(j.icon, 'Aucun mouvement', `Chaque revenu met ${j.pct} % ici automatiquement.`, '#/add?type=income', 'Ajouter un revenu')}</div>`;
+    <div class="card tight">${moves.slice(0, 200).map(({ t, v }) => `<a class="row" href="#/edit/${t.id}?back=${encodeURIComponent('#/jar/' + j.id)}"><div class="l"><div class="t">${esc(txTitle(t))}</div><div class="s">${fmtDate(t.date, true)}</div></div>
+      <div class="r ${v > 0 ? 'pos' : 'neg'}">${fmt(v, { sign: true })}</div></a>`).join('') || emptyState(j.icon, 'Aucun mouvement', `Chaque revenu met ${j.pct} % ici automatiquement.`, '#/add?type=income', 'Ajouter un revenu')}</div>`;
 }

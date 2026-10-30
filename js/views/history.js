@@ -1,7 +1,7 @@
 // All transactions, grouped by day, with filters.
 import { state, save } from '../store.js';
 import { fmt, fmtDate, today, effects, txTitle, txIcon, txSign, TYPE_LABEL, wallet, jar, cat } from '../logic.js';
-import { esc, opts, toast, ask, enableSwipe, tile, emptyState } from '../ui.js';
+import { esc, opts, toast, ask, enableSwipe, tile, emptyState, go } from '../ui.js';
 
 let filter = { month: '', type: '', jar: '', wallet: '' };
 
@@ -40,7 +40,7 @@ export function render() {
     ].filter(Boolean).join(' · ');
     const c = cat(t.cat);
     return `${sep}<div class="swipe"><button class="swipe-del" data-del="${t.id}">Supprimer</button>
-      <div class="row">${tile(txIcon(t), c ? jar(t.jar)?.color || (t.type === 'income' ? 'var(--ok)' : '') : '')}<div class="l"><div class="t">${esc(txTitle(t))}</div><div class="s">${sub}</div></div>
+      <div class="row" data-edit="${t.id}" role="button" tabindex="0">${tile(txIcon(t), c ? jar(t.jar)?.color || (t.type === 'income' ? 'var(--ok)' : '') : '')}<div class="l"><div class="t">${esc(txTitle(t))}</div><div class="s">${sub}</div></div>
       ${t.type === 'div_convert'
         // dividends → capital stays inside the investment: neutral amount, no sign
         ? `<div class="r num">${fmt(t.amount)}</div>`
@@ -70,6 +70,11 @@ export function mount(root) {
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   });
   enableSwipe(root);
+  // tap a row to edit it (not when the tap ends a swipe, nor when it closes an open row)
+  root.querySelectorAll('[data-edit]').forEach(r => r.onclick = () => {
+    if (r.dataset.swiped || r.classList.contains('open')) return;
+    go(`#/edit/${r.dataset.edit}`);
+  });
   root.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     const t = state.tx.find(x => x.id === b.dataset.del);
     if (!t) return;

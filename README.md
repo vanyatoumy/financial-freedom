@@ -15,7 +15,7 @@ No dependencies and no build step. Data stays on the device (IndexedDB) and the 
 - **Loans and debts** with loan date, expected return date, partial repayments, interest, overdue alerts, and "forgive" (the rest becomes a gift paid from Dons).
 - **Investments** (your association): money invested, payments received, return %, expected next payment, "no payment this time".
 - **Dashboard**: available today, protected money, net worth, money not yet put in its home wallet, financial freedom %, monthly totals.
-- **History** with filters, **Settings** (percentages, wallets, categories), **CSV export**, **JSON backup and restore**.
+- **History** with filters, tap any operation to **edit** it (amount, date, wallet, jar, category, fees/taxes; income keeps its split proportions; undo available), **Settings** (percentages, wallets, categories), **CSV export**, **JSON backup and restore**.
 
 ## Run it on the computer
 ```bash
